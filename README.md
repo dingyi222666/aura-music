@@ -22,3 +22,5 @@ View your app in AI Studio: https://ai.studio/apps/drive/1ggcfQNwQs0cGrbzb1oapyS
 
 ![Screenshot1](./images/screenshot1.png)
 ![Screenshot2](./images/screenshot2.png)
+
+> Vibe coding with gemini3-pro, gpt-5.1-codex-mini, and claude-sonnet-4.5. The first version only took 10 mins.
