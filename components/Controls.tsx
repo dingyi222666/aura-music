@@ -35,6 +35,8 @@ interface ControlsProps {
   onToggleMode: () => void;
   onTogglePlaylist: () => void;
   accentColor: string;
+  volume: number;
+  onVolumeChange: (volume: number) => void;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -52,18 +54,12 @@ const Controls: React.FC<ControlsProps> = ({
   onToggleMode,
   onTogglePlaylist,
   accentColor,
+  volume,
+  onVolumeChange,
 }) => {
   const [showVolume, setShowVolume] = useState(false);
-  const [volume, setVolume] = useState(1);
   const [isLiked, setIsLiked] = useState(false);
   const volumeContainerRef = useRef<HTMLDivElement>(null);
-
-  // Sync volume with audio element
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume;
-    }
-  }, [volume, audioRef]);
 
   // Close volume popup when clicking outside
   useEffect(() => {
@@ -95,13 +91,9 @@ const Controls: React.FC<ControlsProps> = ({
           </div>
         );
       case PlayMode.SHUFFLE:
-        return (
-          <ShuffleIcon className={iconClass} />
-        );
+        return <ShuffleIcon className={iconClass} />;
       default: // LOOP_ALL
-        return (
-          <LoopIcon className={iconClass} />
-        );
+        return <LoopIcon className={iconClass} />;
     }
   };
 
@@ -219,7 +211,7 @@ const Controls: React.FC<ControlsProps> = ({
                     max="1"
                     step="0.01"
                     value={volume}
-                    onChange={(e) => setVolume(parseFloat(e.target.value))}
+                    onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-none"
                     style={
                       {

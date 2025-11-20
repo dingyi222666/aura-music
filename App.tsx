@@ -5,6 +5,7 @@ import MobileFluidBackground from "./components/MobileFluidBackground";
 import Controls from "./components/Controls";
 import LyricsView from "./components/LyricsView";
 import PlaylistPanel from "./components/PlaylistPanel";
+import KeyboardShortcuts from "./components/KeyboardShortcuts";
 import { usePlaylist } from "./hooks/usePlaylist";
 import { usePlayer } from "./hooks/usePlayer";
 import { AuraLogo } from "./components/Icons";
@@ -40,6 +41,7 @@ const App: React.FC = () => {
   } = player;
 
   const [showPlaylist, setShowPlaylist] = useState(false);
+  const [volume, setVolume] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lrcInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,6 +57,12 @@ const App: React.FC = () => {
     if (typeof window === "undefined") return 0;
     return window.innerWidth;
   });
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume, audioRef]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -219,6 +227,8 @@ const App: React.FC = () => {
           onToggleMode={toggleMode}
           onTogglePlaylist={() => setShowPlaylist(true)}
           accentColor={accentColor}
+          volume={volume}
+          onVolumeChange={setVolume}
         />
 
         {/* Floating Playlist Panel */}
@@ -277,6 +287,19 @@ const App: React.FC = () => {
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={playNext}
         crossOrigin="anonymous"
+      />
+
+      <KeyboardShortcuts
+        isPlaying={playState === PlayState.PLAYING}
+        onPlayPause={togglePlay}
+        onNext={playNext}
+        onPrev={playPrev}
+        onSeek={handleSeek}
+        currentTime={currentTime}
+        duration={duration}
+        volume={volume}
+        onVolumeChange={setVolume}
+        onToggleMode={toggleMode}
       />
 
       {/* Top Bar (Hover to Reveal, White Blur) */}
