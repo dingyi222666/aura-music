@@ -3,10 +3,10 @@ import { LyricLine as LyricLineType } from "../types";
 
 const containsNonAscii = (text: string) => /[^\x00-\x7f]/.test(text);
 const isPunctuation = (text: string) => /^[\p{P}\p{S}]+$/u.test(text);
-const spacingClassForWord = (text: string) => {
+const spacingClassForWord = (text: string, isMobile = false) => {
   if (isPunctuation(text)) return "mr-0.5";
-  if (containsNonAscii(text)) return "mr-1.5";
-  return "mr-2.5";
+  if (containsNonAscii(text)) return isMobile ? "mr-1" : "mr-1.5";
+  return isMobile ? "mr-2" : "mr-2.5";
 };
 
 interface LyricLineProps {
@@ -18,6 +18,7 @@ interface LyricLineProps {
   onLineClick: (time: number) => void;
   audioRef: React.RefObject<HTMLAudioElement>;
   setLineRef: (el: HTMLDivElement | null) => void;
+  isMobile: boolean;
 }
 
 const LyricLine = React.memo(
@@ -30,6 +31,7 @@ const LyricLine = React.memo(
     onLineClick,
     audioRef,
     setLineRef,
+    isMobile,
   }: LyricLineProps) => {
     const wordsRef = useRef<(HTMLSpanElement | null)[]>([]);
     const rafRef = useRef<number>(0);
@@ -51,8 +53,7 @@ const LyricLine = React.memo(
             const span = wordsRef.current[i];
             if (!span) return;
 
-            const spacing =
-              span.dataset.spacing || spacingClassForWord(word.text);
+            const spacing = spacingClassForWord(word.text, isMobile);
             const baseClass = `word-base ${spacing} whitespace-pre`;
 
             const isCurrent =
@@ -91,11 +92,15 @@ const LyricLine = React.memo(
       }
 
       return () => cancelAnimationFrame(rafRef.current);
-    }, [isActive, line, audioRef]);
+    }, [isActive, line, audioRef, isMobile]);
 
     // ------------------------------------------------------------
     // Render Logic
     // ------------------------------------------------------------
+
+    const textSizeClass = isMobile
+      ? "text-2xl md:text-3xl lg:text-4xl"
+      : "text-3xl md:text-4xl lg:text-5xl";
 
     return (
       <div
@@ -164,10 +169,12 @@ const LyricLine = React.memo(
 
             `}</style>
 
-        <div className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight tracking-tight text-white">
+        <div
+          className={`${textSizeClass} font-bold leading-tight tracking-tight text-white`}
+        >
           {line.words && line.words.length > 0 ? (
             line.words.map((word, i) => {
-              const spacingClass = spacingClassForWord(word.text);
+              const spacingClass = spacingClassForWord(word.text, isMobile);
               return (
                 <span
                   key={i}

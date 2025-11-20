@@ -188,7 +188,11 @@ const LyricsView: React.FC<LyricsViewProps> = ({
           const opacity = Math.min(1, baseOpacity * fadeMultiplier);
 
           // Blur: 0 at center, increasing at edges (disabled on mobile for readability)
-          const blur = isMobile ? 0 : (sState.visualState ? 0 : 4 * Math.pow(normDist, 1.5));
+          const blur = isMobile
+            ? 0
+            : sState.visualState
+              ? 0
+              : 4 * Math.pow(normDist, 1.5);
 
           // Unified Matrix3D Application
           // Combines Scaling (sx, sy) and Translation (ty = -currentY)
@@ -277,7 +281,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className="relative h-[85vh] lg:h-[60vh] w-full overflow-hidden cursor-grab active:cursor-grabbing touch-none select-none"
+      className="relative h-[95vh] lg:h-[60vh] w-full overflow-hidden cursor-grab active:cursor-grabbing touch-none select-none"
       style={{
         maskImage:
           "linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%)",
@@ -301,6 +305,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
               distance={Math.abs(i - activeIndex)}
               onLineClick={(t) => onSeekRequest(t, true)}
               audioRef={audioRef}
+              isMobile={isMobile}
               setLineRef={(el) => {
                 if (el) lineRefs.current.set(i, el);
                 else lineRefs.current.delete(i);
