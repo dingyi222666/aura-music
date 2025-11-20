@@ -138,9 +138,9 @@ export const searchNetEase = async (
 export const fetchNeteasePlaylist = async (playlistId: string) => {
   try {
     // 使用網易雲音樂 API 獲取歌單所有歌曲
-    // 由於接口限制，需要分頁獲取，每次獲取 100 首
+    // 由於接口限制，需要分頁獲取，每次獲取 50 首
     const allTracks = [];
-    const limit = 100;
+    const limit = 50;
     let offset = 0;
     let shouldContinue = true;
 
