@@ -320,6 +320,44 @@ export const usePlayer = ({
     }
   }, [queue, currentIndex]);
 
+  const [speed, setSpeed] = useState(1);
+  const [pitch, setPitch] = useState(0);
+
+  const handleSetSpeed = useCallback((newSpeed: number) => {
+    setSpeed(newSpeed);
+    setPitch(0);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = newSpeed;
+      audioRef.current.preservesPitch = true;
+    }
+  }, []);
+
+  const handleSetPitch = useCallback((newPitch: number) => {
+    setPitch(newPitch);
+    // Do not update speed state here to avoid UI coupling
+    if (audioRef.current) {
+      const newRate = Math.pow(2, newPitch);
+      audioRef.current.playbackRate = newRate;
+      audioRef.current.preservesPitch = false;
+    }
+  }, []);
+
+  // Ensure playback rate is applied when song changes or play state changes
+  useEffect(() => {
+    if (audioRef.current) {
+      // If pitch is non-zero, we are in pitch mode (preservesPitch = false)
+      // Otherwise we are in speed mode (preservesPitch = true)
+      const isPitchMode = pitch !== 0;
+      audioRef.current.preservesPitch = !isPitchMode;
+
+      if (isPitchMode) {
+        audioRef.current.playbackRate = Math.pow(2, pitch);
+      } else {
+        audioRef.current.playbackRate = speed;
+      }
+    }
+  }, [currentSong, playState, speed, pitch]);
+
   return {
     audioRef,
     currentSong,
@@ -330,6 +368,8 @@ export const usePlayer = ({
     playMode,
     matchStatus,
     accentColor,
+    speed,
+    pitch,
     togglePlay,
     toggleMode,
     handleSeek,
@@ -341,5 +381,7 @@ export const usePlayer = ({
     handlePlaylistAddition,
     loadLyricsFile,
     addSongAndPlay,
+    setSpeed: handleSetSpeed,
+    setPitch: handleSetPitch,
   };
 };

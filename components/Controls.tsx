@@ -15,7 +15,7 @@ import {
   PlayIcon,
   PrevIcon,
   NextIcon,
-  LikeIcon,
+  SettingsIcon,
   QueueIcon,
 } from "./Icons";
 import { PlayMode } from "../types";
@@ -37,6 +37,10 @@ interface ControlsProps {
   accentColor: string;
   volume: number;
   onVolumeChange: (volume: number) => void;
+  speed: number;
+  pitch: number;
+  onSpeedChange: (speed: number) => void;
+  onPitchChange: (pitch: number) => void;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -56,12 +60,17 @@ const Controls: React.FC<ControlsProps> = ({
   accentColor,
   volume,
   onVolumeChange,
+  speed,
+  pitch,
+  onSpeedChange,
+  onPitchChange,
 }) => {
   const [showVolume, setShowVolume] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const volumeContainerRef = useRef<HTMLDivElement>(null);
+  const settingsContainerRef = useRef<HTMLDivElement>(null);
 
-  // Close volume popup when clicking outside
+  // Close popups when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -69,6 +78,12 @@ const Controls: React.FC<ControlsProps> = ({
         !volumeContainerRef.current.contains(event.target as Node)
       ) {
         setShowVolume(false);
+      }
+      if (
+        settingsContainerRef.current &&
+        !settingsContainerRef.current.contains(event.target as Node)
+      ) {
+        setShowSettings(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -170,7 +185,7 @@ const Controls: React.FC<ControlsProps> = ({
       </div>
 
       {/* Controls Row - Flattened for Equal Spacing */}
-      {/* Layout: [Mode] [Vol] [Prev] [Play] [Next] [Like] [List] */}
+      {/* Layout: [Mode] [Vol] [Prev] [Play] [Next] [Settings] [List] */}
       <div className="w-full max-w-[380px] mt-6 px-2">
         <div className="flex items-center justify-between w-full">
           {/* 1. Play Mode */}
@@ -186,9 +201,8 @@ const Controls: React.FC<ControlsProps> = ({
           <div className="relative" ref={volumeContainerRef}>
             <button
               onClick={() => setShowVolume(!showVolume)}
-              className={`p-2 rounded-full hover:bg-white/10 transition-colors ${
-                showVolume ? "text-white" : "text-white/60 hover:text-white"
-              }`}
+              className={`p-2 rounded-full hover:bg-white/10 transition-colors ${showVolume ? "text-white" : "text-white/60 hover:text-white"
+                }`}
               title="Volume"
             >
               {getVolumeButtonIcon()}
@@ -265,16 +279,76 @@ const Controls: React.FC<ControlsProps> = ({
             <NextIcon className="w-9 h-9" />
           </button>
 
-          {/* 6. Like */}
-          <button
-            onClick={() => setIsLiked(!isLiked)}
-            className={`p-2 rounded-full hover:bg-white/10 transition-colors ${
-              isLiked ? "text-rose-500" : "text-white/60 hover:text-white"
-            }`}
-            title="Like"
-          >
-            <LikeIcon filled={isLiked} className="w-5 h-5" />
-          </button>
+          {/* 6. Settings (Replaces Like) */}
+          <div className="relative" ref={settingsContainerRef}>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-2 rounded-full hover:bg-white/10 transition-colors ${showSettings ? "text-white" : "text-white/60 hover:text-white"
+                }`}
+              title="Settings"
+            >
+              <SettingsIcon className="w-5 h-5" />
+            </button>
+
+            {/* Settings Popup */}
+            {showSettings && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-8 w-[200px] p-4 rounded-[26px] bg-black/20 backdrop-blur-[80px] saturate-150 shadow-[0_20px_50px_rgba(0,0,0,0.3)] animate-in fade-in slide-in-from-bottom-4 duration-200 z-50 flex flex-col gap-4 cursor-auto">
+                {/* Pitch Control */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between items-center text-xs font-medium text-white/80">
+                    <span>Pitch</span>
+                    <span className="font-mono">{pitch.toFixed(1)}</span>
+                  </div>
+                  <div className="relative h-6 flex items-center">
+                    <div className="absolute inset-x-0 h-1 bg-white/20 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-white"
+                        style={{
+                          width: `${((pitch + 1) / 3) * 100}%`, // Map -1..2 to 0..1
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="range"
+                      min="-1"
+                      max="2"
+                      step="0.1"
+                      value={pitch}
+                      onChange={(e) => onPitchChange(parseFloat(e.target.value))}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Speed Control */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between items-center text-xs font-medium text-white/80">
+                    <span>Speed</span>
+                    <span className="font-mono">{speed.toFixed(1)}x</span>
+                  </div>
+                  <div className="relative h-6 flex items-center">
+                    <div className="absolute inset-x-0 h-1 bg-white/20 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-white"
+                        style={{
+                          width: `${((speed - 0.5) / 1.5) * 100}%`, // Map 0.5..2 to 0..1
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2"
+                      step="0.1"
+                      value={speed}
+                      onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* 7. Playlist/Queue */}
           <button

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
-import { LinkIcon } from './Icons';
+import React, { useState } from "react";
+import { createPortal } from "react-dom";
+import { LinkIcon } from "./Icons";
 
 interface ImportMusicDialogProps {
   isOpen: boolean;
@@ -13,7 +13,7 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
   onClose,
   onImport,
 }) => {
-  const [importUrl, setImportUrl] = useState('');
+  const [importUrl, setImportUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleImport = async () => {
@@ -23,7 +23,7 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
     try {
       const success = await onImport(importUrl);
       if (success) {
-        setImportUrl('');
+        setImportUrl("");
         onClose();
       }
     } finally {
@@ -32,7 +32,7 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
   };
 
   const handleClose = () => {
-    setImportUrl('');
+    setImportUrl("");
     onClose();
   };
 
@@ -57,9 +57,15 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
             <LinkIcon className="w-7 h-7" />
           </div>
 
-          <h3 className="text-xl font-bold text-white tracking-tight">Import Music</h3>
+          <h3 className="text-xl font-bold text-white tracking-tight">
+            Import Music
+          </h3>
           <p className="text-white/60 text-[15px] mt-2 leading-relaxed px-2">
-            Paste a <span className="text-white/90 font-medium">Netease Cloud Music</span> song or playlist link to add to queue.
+            Paste a{" "}
+            <span className="text-white/90 font-medium">
+              Netease Cloud Music
+            </span>{" "}
+            song or playlist link to add to queue.
           </p>
 
           <input
@@ -71,18 +77,6 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
             disabled={isLoading}
             autoFocus
           />
-
-          {/* Progress Bar */}
-          <div className={`w-full h-1 mt-4 bg-white/5 rounded-full overflow-hidden transition-opacity duration-300 ${isLoading ? 'opacity-100' : 'opacity-0'}`}>
-            <div className="h-full bg-blue-500/50 w-full origin-left animate-[progress-indeterminate_1s_infinite_linear]"></div>
-          </div>
-          <style>{`
-            @keyframes progress-indeterminate {
-              0% { transform: translateX(-100%) scaleX(0.2); }
-              50% { transform: translateX(0%) scaleX(0.5); }
-              100% { transform: translateX(100%) scaleX(0.2); }
-            }
-          `}</style>
         </div>
 
         {/* Action Buttons (iOS Style) */}
@@ -96,25 +90,44 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
           <button
             onClick={handleImport}
             disabled={isLoading}
-            className={`py-4 text-[17px] font-semibold transition-colors flex items-center justify-center gap-2 ${isLoading ? 'text-white/40 cursor-not-allowed' : 'text-blue-400 hover:bg-white/5 active:bg-white/10'
-              }`}
+            className={`py-4 text-[17px] font-semibold transition-colors flex items-center justify-center gap-2 ${
+              isLoading
+                ? "text-white/40 cursor-not-allowed"
+                : "text-blue-400 hover:bg-white/5 active:bg-white/10"
+            }`}
           >
             {isLoading ? (
               <>
-                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  className="animate-spin h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
                 <span>Importing...</span>
               </>
             ) : (
-              'Import'
+              "Import"
             )}
           </button>
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };
 

@@ -265,6 +265,10 @@ const App: React.FC = () => {
           accentColor={accentColor}
           volume={volume}
           onVolumeChange={setVolume}
+          speed={player.speed}
+          pitch={player.pitch}
+          onSpeedChange={player.setSpeed}
+          onPitchChange={player.setPitch}
         />
 
         {/* Floating Playlist Panel */}
