@@ -1,4 +1,5 @@
 import { BaseBackgroundRender } from "./BaseBackgroundRender";
+import backgroundWorkerUrl from "./webWorkerBackground.worker.ts?worker&url";
 
 type WorkerCommand =
   | { type: "init"; canvas: OffscreenCanvas; width: number; height: number; colors: string[] }
@@ -10,16 +11,10 @@ type WorkerCommand =
 export class WebWorkerBackgroundRender extends BaseBackgroundRender {
   private canvas: HTMLCanvasElement;
   private worker: Worker | null = null;
-  private readonly workerUrl: string | URL;
 
-  constructor(
-    canvas: HTMLCanvasElement,
-    workerUrl: string | URL,
-    targetFps: number = 60,
-  ) {
+  constructor(canvas: HTMLCanvasElement, targetFps: number = 60) {
     super(targetFps);
     this.canvas = canvas;
-    this.workerUrl = workerUrl;
   }
 
   start(colors: string[]) {
@@ -33,7 +28,7 @@ export class WebWorkerBackgroundRender extends BaseBackgroundRender {
     try {
       const offscreen = this.canvas.transferControlToOffscreen();
       this.canvas.dataset.offscreenTransferred = "true";
-      this.worker = new Worker(this.workerUrl, { type: "module" });
+      this.worker = new Worker(backgroundWorkerUrl, { type: "module" });
       const command: WorkerCommand = {
         type: "init",
         canvas: offscreen,

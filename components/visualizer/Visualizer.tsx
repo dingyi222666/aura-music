@@ -1,5 +1,5 @@
-
 import React, { useEffect, useRef } from 'react';
+import audioProcessorUrl from './AudioProcessor.ts?worker&url';
 
 interface VisualizerProps {
     audioRef: React.RefObject<HTMLAudioElement>;
@@ -38,8 +38,7 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
                 try {
                     console.log("Visualizer: Loading AudioWorklet module...");
                     // Load the module using a URL pointing to the JS file
-                    const workletUrl = new URL('./AudioProcessor.ts', import.meta.url);
-                    await ctx.audioWorklet.addModule(workletUrl.href);
+                    await ctx.audioWorklet.addModule(audioProcessorUrl);
                     console.log("Visualizer: AudioWorklet module loaded successfully.");
 
                     const workletNode = new AudioWorkletNode(ctx, 'audio-processor');

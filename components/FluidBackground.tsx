@@ -3,11 +3,6 @@ import { FlowingLayer, createFlowingLayers, defaultColors as mobileDefaultColors
 import { UIBackgroundRender } from "./background/renderer/UIBackgroundRender";
 import { WebWorkerBackgroundRender } from "./background/renderer/WebWorkerBackgroundRender";
 
-const workerUrl = new URL(
-  "./background/renderer/webWorkerBackground.worker.ts",
-  import.meta.url,
-);
-
 const desktopGradientDefaults = [
   "rgb(60, 20, 80)",
   "rgb(100, 40, 60)",
@@ -211,7 +206,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
     if (shouldUseWorker) {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      const workerRenderer = new WebWorkerBackgroundRender(canvas, workerUrl);
+      const workerRenderer = new WebWorkerBackgroundRender(canvas);
       workerRenderer.start(colorsRef.current ?? []);
       rendererRef.current = workerRenderer;
       return () => {
@@ -231,7 +226,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
       uiRenderer.stop();
       rendererRef.current = null;
     };
-  }, [isMobileLayout, renderGradientFrame, renderMobileFrame, workerUrl, canvasInstanceKey]);
+  }, [isMobileLayout, renderGradientFrame, renderMobileFrame, canvasInstanceKey]);
 
   useEffect(() => {
     const renderer = rendererRef.current;
