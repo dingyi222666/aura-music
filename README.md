@@ -13,7 +13,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/1ggcfQNwQs0cGrbzb1oapyS
 - [x] Fluid Backgroud with webgl [See](https://www.shadertoy.com/view/wdyczG)
 - [x] Canvas based lryic draw
 - [x] Search, Import music for \*\*music, or import local music
-- [x] Playspeed change, pitch change
+- [x] Playback speed change and pitch change
 
 ## Run Locally
 
