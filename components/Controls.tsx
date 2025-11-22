@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useSpring, useTransition, animated, config } from "@react-spring/web";
-import { SpringSystem, SCALE_BG_SPRING } from "../services/springSystem";
 import { formatTime } from "../services/utils";
 import Visualizer from "./Visualizer";
 import {
@@ -156,44 +155,14 @@ const Controls: React.FC<ControlsProps> = ({
   // (handled by the useEffect above resetting on currentTime change)
   const displayTime = isSeeking ? seekTime : interpolatedTime;
 
-  // Spring Animation for Cover
-  const coverRef = useRef<HTMLDivElement>(null);
-  const springSystem = useRef(new SpringSystem({ scale: 1 })).current;
-  const lastTimeRef = useRef(0);
-  const animationFrameRef = useRef(0);
-
-  const clampScale = (value: number) => Math.max(0.8, Math.min(1.05, value));
-
-  const startAnimation = () => {
-    if (animationFrameRef.current)
-      cancelAnimationFrame(animationFrameRef.current);
-    lastTimeRef.current = performance.now();
-
-    const loop = (now: number) => {
-      const dt = Math.min((now - lastTimeRef.current) / 1000, 0.1);
-      lastTimeRef.current = now;
-
-      const isMoving = springSystem.update(dt);
-      if (coverRef.current) {
-        const scale = clampScale(springSystem.getCurrent("scale"));
-        coverRef.current.style.transform = `scale(${scale})`;
-      }
-
-      if (isMoving) {
-        animationFrameRef.current = requestAnimationFrame(loop);
-      } else {
-        animationFrameRef.current = 0;
-      }
-    };
-    animationFrameRef.current = requestAnimationFrame(loop);
-  };
-
-  useEffect(() => {
-    // Trigger animation on cover change
-    springSystem.setValue("scale", 0.85);
-    springSystem.setTarget("scale", 1, SCALE_BG_SPRING);
-    startAnimation();
-  }, [coverUrl]);
+  // Cover transition animation (vinyl record style)
+  const coverTransitions = useTransition(coverUrl, {
+    keys: (url) => url || "empty",
+    from: { opacity: 0, transform: "translateX(100%) scale(0.9)" },
+    enter: { opacity: 1, transform: "translateX(0%) scale(1)" },
+    leave: { opacity: 0, transform: "translateX(-100%) scale(0.9)" },
+    config: { tension: 280, friction: 35 },
+  });
 
   // Close popups when clicking outside
   useEffect(() => {
@@ -260,22 +229,23 @@ const Controls: React.FC<ControlsProps> = ({
   return (
     <div className="w-full flex flex-col items-center justify-center gap-2 text-white select-none">
       {/* Cover Section */}
-      <div
-        ref={coverRef}
-        className="relative aspect-square w-64 md:w-72 lg:w-[300px] rounded-3xl bg-gradient-to-br from-gray-800 to-gray-900 shadow-2xl shadow-black/50 ring-1 ring-white/10 overflow-hidden mb-6"
-      >
-        {coverUrl ? (
-          <img
-            src={coverUrl}
-            alt="Album Art"
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center w-full h-full text-white/20">
-            <div className="text-8xl mb-4">♪</div>
-            <p className="text-sm">No Music Loaded</p>
-          </div>
-        )}
+      <div className="relative aspect-square w-64 md:w-72 lg:w-[300px] rounded-3xl bg-gradient-to-br from-gray-800 to-gray-900 shadow-2xl shadow-black/50 ring-1 ring-white/10 overflow-hidden mb-6">
+        {coverTransitions((style, url) => (
+          <animated.div style={style} className="absolute inset-0">
+            {url ? (
+              <img
+                src={url}
+                alt="Album Art"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center w-full h-full text-white/20">
+                <div className="text-8xl mb-4">♪</div>
+                <p className="text-sm">No Music Loaded</p>
+              </div>
+            )}
+          </animated.div>
+        ))}
         <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div>
       </div>
       {/* Song Info */}
