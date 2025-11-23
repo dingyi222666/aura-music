@@ -87,12 +87,6 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
         enter: { opacity: 1, transform: 'translateY(0px) scale(1)' },
         leave: { opacity: 0, transform: 'translateY(20px) scale(0.95)' },
         config: { tension: 280, friction: 24 }, // Rebound feel
-        onStart: () => {
-            if (isOpen) {
-                setScrollTop(0);
-                if (listRef.current) listRef.current.scrollTop = 0;
-            }
-        },
         onRest: () => {
             if (!isOpen) {
                 setIsEditing(false);
@@ -100,6 +94,23 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
             }
         }
     });
+
+    // Scroll to current song when opening
+    useEffect(() => {
+        if (isOpen && listRef.current) {
+            const index = queue.findIndex(s => s.id === currentSongId);
+            if (index !== -1) {
+                const containerHeight = listRef.current.clientHeight;
+                const targetScroll = (index * ITEM_HEIGHT) - (containerHeight / 2) + (ITEM_HEIGHT / 2);
+                listRef.current.scrollTop = targetScroll;
+                setScrollTop(targetScroll);
+            } else {
+                listRef.current.scrollTop = 0;
+                setScrollTop(0);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
 
     // Close on click outside
     useEffect(() => {
