@@ -543,7 +543,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({
             type="range"
             min="0.5"
             max="2"
-            step="0.1"
+            step="0.01"
             value={speed}
             onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-none"
@@ -553,7 +553,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({
             } as any}
           />
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none text-[10px] font-bold text-white mix-blend-difference">
-            {speed.toFixed(1)}x
+            {speed.toFixed(2)}x
           </div>
         </div>
         <span className="text-[10px] font-medium text-white/60">Speed</span>
