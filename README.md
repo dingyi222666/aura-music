@@ -10,10 +10,10 @@ View your app in AI Studio: https://ai.studio/apps/drive/1ggcfQNwQs0cGrbzb1oapyS
 
 ## Feature (Github Version)
 
-- [x] Fluid Backgroud with webgl [See](https://www.shadertoy.com/view/wdyczG)
-- [x] Canvas based lryic draw
-- [x] Search, Import music for \*\*music, or import local music
-- [x] Playback speed change and pitch change
+- [x] **WebGL Fluid Background**: Implements a dynamic fluid background effect using WebGL shaders. [Reference](https://www.shadertoy.com/view/wdyczG)
+- [x] **Canvas Lyric Rendering**: High-performance, custom-drawn lyric visualization on HTML5 Canvas.
+- [x] **Music Import & Search**: Seamlessly search and import music from external providers or local files.
+- [x] **Audio Manipulation**: Real-time control over playback speed and pitch shifting.
 
 ## Run Locally
 

@@ -25,6 +25,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
   const [lyricLines, setLyricLines] = useState<LyricLine[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(0);
 
   // Detect mobile layout
   useEffect(() => {
@@ -44,6 +45,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         setContainerWidth(entry.contentRect.width);
+        setContainerHeight(entry.contentRect.height);
       }
     });
     observer.observe(containerRef.current);
@@ -92,8 +94,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       audioRef,
       currentTime,
       isMobile,
-      containerHeight:
-        typeof window !== "undefined" ? window.innerHeight * 0.6 : 800,
+      containerHeight: containerHeight > 0 ? containerHeight : 800,
       linePositions,
       lineHeights,
       marginY,
@@ -312,7 +313,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
 
   if (!lyrics.length) {
     return (
-      <div className="h-[85vh] lg:h-[60vh] flex flex-col items-center justify-center text-white/40 select-none">
+      <div className="h-[95vh] lg:h-[65vh] flex flex-col items-center justify-center text-white/40 select-none">
         {matchStatus === "matching" ? (
           <div className="animate-pulse">Syncing Lyrics...</div>
         ) : (
