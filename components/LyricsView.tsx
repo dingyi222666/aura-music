@@ -53,6 +53,13 @@ const LyricsView: React.FC<LyricsViewProps> = ({
   }, [lyrics.length, mobileHoverIndex]);
 
   useEffect(() => {
+    if (!isMobile) return;
+    if (currentTime < 0.1) {
+      setMobileHoverIndex(null);
+    }
+  }, [currentTime, isMobile]);
+
+  useEffect(() => {
     if (!isMobile) {
       if (mobileHoverTimeoutRef.current) {
         clearTimeout(mobileHoverTimeoutRef.current);
@@ -382,7 +389,9 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       // Apply transformations
       const cy = visualY + lineHeight / 2;
       ctx.translate(0, cy); // Translate to vertical center of the line position
-      ctx.scale(scale, scale);
+      // Don't apply physics scale to interlude lines - they have their own expansion animation
+      const effectiveScale = line.isInterlude() ? 1 : scale;
+      ctx.scale(effectiveScale, effectiveScale);
       ctx.translate(0, -lineHeight / 2); // Translate back to top-left relative to center
 
       ctx.globalAlpha = opacity;

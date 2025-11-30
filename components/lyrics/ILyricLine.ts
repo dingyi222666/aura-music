@@ -7,4 +7,5 @@ export interface ILyricLine {
     getLogicalWidth(): number;
     getLogicalHeight(): number;
     getTextWidth(): number;
+    isInterlude(): boolean;
 }

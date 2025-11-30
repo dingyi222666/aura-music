@@ -92,6 +92,9 @@ export const useLyricsPhysics = ({
     const springSystem = useRef(new SpringSystem({ scrollY: 0 }));
     const scrollLimitsRef = useRef({ min: 0, max: 0 });
 
+    // Track activeIndex changes to detect seek jumps
+    const prevActiveIndexRef = useRef(-1);
+
     const RESUME_DELAY_MS = 3000;
     const FOCAL_POINT_RATIO = 0.35; // 35% from top (matched to LyricsView)
 
@@ -155,24 +158,20 @@ export const useLyricsPhysics = ({
             return;
         }
 
-        const fallbackIndex = lyrics.findIndex(line => !line.isMetadata);
-        let idx = fallbackIndex !== -1 ? fallbackIndex : (lyrics.length > 0 ? 0 : -1);
-
+        let nextIndex = -1;
         for (let i = 0; i < lyrics.length; i++) {
             const line = lyrics[i];
-            if (line.isMetadata) {
-                continue;
-            }
+            if (line.isMetadata) continue;
 
             if (currentTime >= line.time) {
-                idx = i;
+                nextIndex = i;
             } else {
                 break;
             }
         }
 
-        if (idx !== activeIndex) {
-            setActiveIndex(idx);
+        if (nextIndex !== activeIndex) {
+            setActiveIndex(nextIndex);
         }
     }, [currentTime, lyrics, activeIndex]);
 
@@ -200,6 +199,20 @@ export const useLyricsPhysics = ({
 
         // Use dynamic heights if provided, otherwise fallback to static
         const activeHeights = (currentLineHeights && currentLineHeights.length > 0) ? currentLineHeights : lineHeights;
+
+        // Detect activeIndex jumps (seek operations)
+        const prevActiveIndex = prevActiveIndexRef.current;
+        let activeIndexJump = 0;
+        if (prevActiveIndex !== -1 && activeIndex !== -1) {
+            activeIndexJump = Math.abs(activeIndex - prevActiveIndex);
+        } else if (prevActiveIndex !== -1 && activeIndex === -1) {
+            // Seeking to a position before any lyrics - treat as large jump
+            activeIndexJump = prevActiveIndex + 1;
+        }
+        prevActiveIndexRef.current = activeIndex;
+
+        // Determine if we need to snap due to a large seek jump
+        const shouldSnap = activeIndexJump > 5;
 
         // 1. Handle Global Scroll Physics
         const timeSinceInteraction = now - sState.lastInteractionTime;
@@ -305,25 +318,27 @@ export const useLyricsPhysics = ({
 
             const displacement = state.posY.current - state.posY.target;
 
-            // If displacement is huge (e.g. seek), snap
-            if (Math.abs(displacement) > containerHeight * 2) {
+            // When a seek jump is detected, snap line positions to follow scrollY directly
+            // This prevents lines from animating independently and causing visual chaos
+            // Also snap if displacement is very large
+            if (shouldSnap || Math.abs(displacement) > containerHeight * 0.5) {
                 state.posY.current = state.posY.target;
                 state.posY.velocity = 0;
-            }
-
-            let posConfig: SpringConfig;
-            const isMovingDown = state.posY.target > state.posY.current + 1;
-
-            if (isUserInteracting) {
-                posConfig = { mass: 0.5, stiffness: 400, damping: 35, precision: 0.1 };
-            } else if (isMovingDown) {
-                posConfig = { mass: 1, stiffness: 350, damping: 40, precision: 0.1 };
             } else {
-                const relativeIndex = index - activeIndex;
-                posConfig = getLinePosSpring(relativeIndex);
-            }
+                let posConfig: SpringConfig;
+                const isMovingDown = state.posY.target > state.posY.current + 1;
 
-            updateSpring(state.posY, posConfig, dt);
+                if (isUserInteracting) {
+                    posConfig = { mass: 0.5, stiffness: 400, damping: 35, precision: 0.1 };
+                } else if (isMovingDown) {
+                    posConfig = { mass: 1, stiffness: 350, damping: 40, precision: 0.1 };
+                } else {
+                    const relativeIndex = index - activeIndex;
+                    posConfig = getLinePosSpring(relativeIndex);
+                }
+
+                updateSpring(state.posY, posConfig, dt);
+            }
 
             // --- B. Scale Physics ---
             const lineY = currentPositions[index] || 0;
@@ -340,7 +355,12 @@ export const useLyricsPhysics = ({
             }
 
             state.scale.target = targetScale;
-            updateSpring(state.scale, SCALE_SPRING, dt);
+            if (shouldSnap) {
+                state.scale.current = targetScale;
+                state.scale.velocity = 0;
+            } else {
+                updateSpring(state.scale, SCALE_SPRING, dt);
+            }
         });
     }, [activeIndex, containerHeight, linePositions, lineHeights]);
 

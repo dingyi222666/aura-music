@@ -441,6 +441,10 @@ export class LyricLine implements ILyricLine {
     return this.logicalHeight;
   }
 
+  public isInterlude() {
+    return false;
+  }
+
   // --- Helpers ---
 
   private measureLineText({

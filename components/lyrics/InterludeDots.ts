@@ -75,7 +75,8 @@ export class InterludeDots implements ILyricLine {
         this.springSystem.setTarget("expansion", targetExpansion, INTERLUDE_SPRING);
         this.springSystem.update(dt);
 
-        const expansion = Math.max(0, this.springSystem.getCurrent("expansion"));
+        // Clamp expansion to [0, 1] to prevent overshoot effects
+        const expansion = Math.max(0, Math.min(1, this.springSystem.getCurrent("expansion")));
 
         // Clear canvas
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
@@ -152,8 +153,13 @@ export class InterludeDots implements ILyricLine {
     }
 
     public getCurrentHeight() {
-        const expansion = this.springSystem.getCurrent("expansion");
-        return this._height * expansion;
+        // Return fixed height regardless of expansion state
+        // This prevents layout shifts when interlude becomes active/inactive
+        return this._height;
+    }
+
+    public isInterlude() {
+        return true;
     }
 
     public getCanvas() {

@@ -180,7 +180,7 @@ export const insertInterludes = (lyrics: LyricLine[]): LyricLine[] => {
   if (lyrics.length === 0) return lyrics;
 
   const result: LyricLine[] = [];
-  const GAP_THRESHOLD = 10; // Seconds - insert interlude for gaps > 10s between lyrics
+  const GAP_THRESHOLD = 6; // Seconds - insert interlude for gaps > 6s between lyrics
   const OPENING_THRESHOLD = 3; // Seconds - insert for opening instrumental > 3s
   const INTERLUDE_TEXT = "...";
 
@@ -214,8 +214,8 @@ export const insertInterludes = (lyrics: LyricLine[]): LyricLine[] => {
 
     if (nextLine.time - effectiveEndTime > GAP_THRESHOLD) {
       // Insert at the middle of the gap, or shortly after the current line ends
-      const interludeTime = effectiveEndTime + 2.0;
-      if (interludeTime < nextLine.time - 2.0) {
+      const interludeTime = effectiveEndTime;
+      if (interludeTime < nextLine.time) {
         result.push(createLine(interludeTime, INTERLUDE_TEXT, { isInterlude: true }));
       }
     }
