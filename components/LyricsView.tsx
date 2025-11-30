@@ -340,6 +340,9 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       if (clickY >= visualY && clickY <= visualY + h) {
         onSeekRequest(lyrics[i].time, true);
         handlers.onClick();
+        if (isMobile) {
+          mouseRef.current = { x: -1000, y: -1000 };
+        }
         break;
       }
     }

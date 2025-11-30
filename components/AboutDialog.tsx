@@ -53,7 +53,7 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
                         Aura Music
                     </h3>
                     <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-medium text-white/40 tracking-wide uppercase mb-6">
-                        v1.2.1 • Pure Web
+                        v1.2.2 • Pure Web
                     </div>
 
                     {/* Description */}
