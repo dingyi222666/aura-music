@@ -822,100 +822,90 @@ export class LyricLine {
     duration: number,
     mainHeight: number,
   ) {
+    // Dim color must match the inactive word color (0.5 opacity)
+    const dimColor = "rgba(255, 255, 255, 0.5)";
+
     // If animation is complete, draw the full word with subtle float
     if (progress >= 1) {
       this.ctx.save();
       this.ctx.fillStyle = "#ffffff";
-      // Maintain slight lift for completed words
-      this.ctx.fillText(word.text, 0, -2);
+      this.ctx.fillText(word.text, 0, -1.5);
       this.ctx.restore();
       return;
     }
 
-    const highlightWidth = Math.max(
-      0,
-      Math.min(word.width, word.width * progress),
-    );
-    const remainingWidth = Math.max(0, word.width - highlightWidth);
+    const highlightX = word.width * progress;
+    // Gradient transition zone - larger, extending more into dim area
+    const transitionZone = Math.min(48, word.width * 0.35);
 
-    // Physics-based animation values using spring mechanics
-    // Use critically damped spring response for smooth, natural motion
-    const springResponse = 1 - Math.pow(1 - progress, 2.2);
+    // Subtle lift: smooth ease-out curve
+    const liftAmount = -1.8;
+    const liftProgress = 1 - Math.pow(1 - progress, 2);
+    const lift = liftAmount * liftProgress;
 
-    // Skew: starts with slight forward lean, settles to upright
-    // Models the "momentum" of text being revealed
-    const maxSkew = 0.0004;
-    const skewDecay = Math.exp(-progress * 4); // Exponential decay
-    const skewX = maxSkew * skewDecay;
-
-    // Lift: spring-based rise with slight overshoot then settle
-    // Uses underdamped spring formula for natural feel
-    const liftMax = -2.5;
-    const overshoot = 1.08; // 8% overshoot
-    const dampedOscillation =
-      1 - Math.exp(-progress * 5) * Math.cos(progress * Math.PI * 0.5);
-    const lift = liftMax * Math.min(dampedOscillation * overshoot, 1);
-
-    // Apply transform to the ENTIRE word context
     this.ctx.save();
     this.ctx.translate(0, lift);
-    this.ctx.transform(1, 0, -skewX, 1, 0, 0);
 
-    // Draw inactive part (clipped) - upcoming text
-    if (remainingWidth > 0) {
+    // Transition zone: starts slightly before current position, extends further into dim area
+    const gradientStart = Math.max(0, highlightX - transitionZone * 0.3);
+    const gradientEnd = Math.min(word.width, highlightX + transitionZone * 0.7);
+
+    // Create gradient: white (left) -> dim (right)
+    const revealGradient = this.ctx.createLinearGradient(
+      gradientStart,
+      0,
+      gradientEnd,
+      0,
+    );
+    revealGradient.addColorStop(0, "#ffffff");
+    revealGradient.addColorStop(1, dimColor);
+
+    // Draw fully highlighted portion (left of transition zone)
+    if (gradientStart > 0) {
       this.ctx.save();
       this.ctx.beginPath();
-      this.ctx.rect(
-        highlightWidth - 1,
-        -mainHeight * 0.2,
-        remainingWidth + 2,
-        mainHeight * 1.35,
-      );
+      this.ctx.rect(-2, -mainHeight * 0.3, gradientStart + 2, mainHeight * 1.5);
       this.ctx.clip();
-      this.ctx.fillStyle = "rgba(255, 255, 255, 0.42)";
+      this.ctx.fillStyle = "#ffffff";
       this.ctx.fillText(word.text, 0, 0);
       this.ctx.restore();
     }
 
-    // Draw active part (clipped) - revealed text with subtle glow
-    if (highlightWidth > 0.25) {
-      const gradientWidth = Math.max(word.width, 1);
+    // Draw the gradient transition zone
+    this.ctx.save();
+    this.ctx.beginPath();
+    this.ctx.rect(gradientStart, -mainHeight * 0.3, gradientEnd - gradientStart, mainHeight * 1.5);
+    this.ctx.clip();
+    this.ctx.fillStyle = revealGradient;
+    this.ctx.fillText(word.text, 0, 0);
+    this.ctx.restore();
 
-      // Add subtle glow to the leading edge using physics-based falloff
-      const edgeGlow = Math.exp(-Math.pow(progress - 0.5, 2) * 8) * 0.3;
-      if (edgeGlow > 0.05) {
-        this.ctx.save();
-        this.ctx.shadowColor = `rgba(255, 255, 255, ${edgeGlow})`;
-        this.ctx.shadowBlur = 8;
-        this.ctx.fillStyle = "transparent";
-        this.ctx.fillText(word.text, 0, 0);
-        this.ctx.restore();
-      }
-
-      // Create gradient for smooth reveal
-      const fillGradient = this.ctx.createLinearGradient(
-        0,
-        0,
-        gradientWidth,
-        0,
-      );
-      fillGradient.addColorStop(0, "#ffffff");
-      fillGradient.addColorStop(1, "rgba(255, 255, 255, 0.7)");
-
+    // Draw dim portion (right of transition zone)
+    if (gradientEnd < word.width) {
       this.ctx.save();
       this.ctx.beginPath();
-      this.ctx.rect(
-        -2,
-        -mainHeight * 0.2,
-        highlightWidth + 4,
-        mainHeight * 1.35,
-      );
+      this.ctx.rect(gradientEnd, -mainHeight * 0.3, word.width - gradientEnd + 2, mainHeight * 1.5);
       this.ctx.clip();
-      this.ctx.fillStyle = fillGradient;
+      this.ctx.fillStyle = dimColor;
       this.ctx.fillText(word.text, 0, 0);
       this.ctx.restore();
     }
 
+    // Add subtle glow at the current playback position
+    const cursorGlowIntensity = 0.2;
+    this.ctx.save();
+    this.ctx.shadowColor = `rgba(255, 255, 255, ${cursorGlowIntensity})`;
+    this.ctx.shadowBlur = 6;
+    this.ctx.beginPath();
+    this.ctx.rect(highlightX - 3, 0, 6, mainHeight * 0.8);
+    this.ctx.clip();
+    this.ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+    this.ctx.fillText(word.text, 0, 0);
+    this.ctx.restore();
+
+    // Clean up
+    this.ctx.shadowBlur = 0;
+    this.ctx.shadowColor = "transparent";
     this.ctx.restore();
   }
 
