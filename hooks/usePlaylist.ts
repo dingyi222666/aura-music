@@ -4,8 +4,8 @@ import {
   extractColors,
   parseAudioMetadata,
   parseNeteaseLink,
-  parseLrc,
 } from "../services/utils";
+import { parseLyrics } from "../services/lyrics";
 import {
   fetchNeteasePlaylist,
   fetchNeteaseSong,
@@ -148,7 +148,7 @@ export const usePlaylist = () => {
           // Check for embedded lyrics first (highest priority)
           if (metadata.lyrics && metadata.lyrics.trim().length > 0) {
             try {
-              lyrics = parseLrc(metadata.lyrics);
+              lyrics = parseLyrics(metadata.lyrics);
             } catch (err) {
               console.warn("Failed to parse embedded lyrics", err);
             }
@@ -191,7 +191,7 @@ export const usePlaylist = () => {
                 reader.readAsText(matchedLyricsFile!);
               });
               if (lrcText) {
-                lyrics = parseLrc(lrcText);
+                lyrics = parseLyrics(lrcText);
               }
             }
           }

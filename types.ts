@@ -10,6 +10,7 @@ export interface LyricLine {
   translation?: string; // Secondary text (e.g. Translation)
   words?: LyricWord[]; // For enhanced LRC animation of the main text
   isPreciseTiming?: boolean; // If true, end times are exact (from YRC) and shouldn't be auto-extended
+  isInterlude?: boolean; // If true, this is an instrumental interlude line ("...")
 }
 
 export interface Song {

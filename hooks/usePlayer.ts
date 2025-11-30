@@ -7,7 +7,8 @@ import {
   useState,
 } from "react";
 import { Song, PlayState, PlayMode } from "../types";
-import { parseLrc, extractColors, shuffleArray } from "../services/utils";
+import { extractColors, shuffleArray } from "../services/utils";
+import { parseLyrics } from "../services/lyrics";
 import {
   fetchLyricsById,
   searchAndMatchLyrics,
@@ -255,12 +256,13 @@ export const usePlayer = ({
 
   const mergeLyricsWithMetadata = useCallback(
     (result: { lrc: string; tLrc?: string; metadata: string[] }) => {
-      const parsed = parseLrc(result.lrc, result.tLrc);
+      const parsed = parseLyrics(result.lrc, result.tLrc);
       const metadataCount = result.metadata.length;
       const metadataLines = result.metadata.map((text, idx) => ({
-        time: -0.01 * (metadataCount - idx),
+        time: -0.000001 * (metadataCount - idx),
         text,
       }));
+      console.log(metadataLines)
       return [...metadataLines, ...parsed].sort((a, b) => a.time - b.time);
     },
     [],
@@ -273,7 +275,7 @@ export const usePlayer = ({
       reader.onload = (event) => {
         const text = event.target?.result as string;
         if (text) {
-          const parsedLyrics = parseLrc(text);
+          const parsedLyrics = parseLyrics(text);
           updateSongInQueue(currentSong.id, { lyrics: parsedLyrics });
           setMatchStatus("success");
         }
@@ -490,6 +492,6 @@ export const usePlayer = ({
     setSpeed: handleSetSpeed,
     togglePreservesPitch: handleTogglePreservesPitch,
     pitch: 0, // Default pitch
-    setPitch: (pitch: number) => {}, // Placeholder
+    setPitch: (pitch: number) => { }, // Placeholder
   };
 };
