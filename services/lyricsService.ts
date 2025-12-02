@@ -254,7 +254,7 @@ export const fetchNeteaseSong = async (
 export const searchAndMatchLyrics = async (
   title: string,
   artist: string,
-): Promise<{ lrc: string; tLrc?: string; metadata: string[] } | null> => {
+): Promise<{ lrc: string; yrc?: string; tLrc?: string; metadata: string[] } | null> => {
   try {
     const songs = await searchNetEase(`${title} ${artist}`, { limit: 5 });
 
@@ -276,23 +276,31 @@ export const searchAndMatchLyrics = async (
 
 export const fetchLyricsById = async (
   songId: string,
-): Promise<{ lrc: string; tLrc?: string; metadata: string[] } | null> => {
+): Promise<{ lrc: string; yrc?: string; tLrc?: string; metadata: string[] } | null> => {
   try {
     // 使用網易雲音樂 API 獲取歌詞
     const lyricUrl = `${NETEASECLOUD_API_BASE}/lyric/new?id=${songId}`;
     const lyricData = await fetchViaProxy(lyricUrl);
 
-    const yrc = lyricData.yrc?.lyric;
-    const lrc = lyricData.lrc?.lyric;
+    const rawYrc = lyricData.yrc?.lyric;
+    const rawLrc = lyricData.lrc?.lyric;
     const tLrc = lyricData.tlyric?.lyric;
 
-    let originalLrc = yrc || lrc;
+    if (!rawYrc && !rawLrc) return null;
 
-    if (!originalLrc) return null;
+    const {
+      clean: cleanLrc,
+      metadata: lrcMetadata,
+    } = rawLrc
+      ? extractMetadataLines(rawLrc)
+      : { clean: undefined, metadata: [] };
 
-    // Extract metadata from original lyrics
-    const { clean: cleanOriginal, metadata: originalMetadata } =
-      extractMetadataLines(originalLrc);
+    const {
+      clean: cleanYrc,
+      metadata: yrcMetadata,
+    } = rawYrc
+      ? extractMetadataLines(rawYrc)
+      : { clean: undefined, metadata: [] };
 
     // Extract metadata from translation if available
     let cleanTranslation: string | undefined;
@@ -303,7 +311,9 @@ export const fetchLyricsById = async (
       translationMetadata = result.metadata;
     }
 
-    const metadataSet = Array.from(new Set([...originalMetadata, ...translationMetadata]))
+    const metadataSet = Array.from(
+      new Set([...lrcMetadata, ...yrcMetadata, ...translationMetadata]),
+    );
 
     if (lyricData.transUser?.nickname) {
       metadataSet.unshift(`翻译贡献者: ${lyricData.transUser.nickname}`);
@@ -312,8 +322,14 @@ export const fetchLyricsById = async (
     if (lyricData.lyricUser?.nickname) {
       metadataSet.unshift(`歌词贡献者: ${lyricData.lyricUser.nickname}`);
     }
+
+    const baseLyrics = cleanLrc || cleanYrc || rawLrc || rawYrc;
+    if (!baseLyrics) return null;
+
+    const yrcForEnrichment = cleanYrc && cleanLrc ? cleanYrc : undefined;
     return {
-      lrc: cleanOriginal || originalLrc,
+      lrc: baseLyrics,
+      yrc: yrcForEnrichment,
       tLrc: cleanTranslation,
       metadata: Array.from(metadataSet),
     };

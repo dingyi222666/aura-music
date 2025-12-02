@@ -1,84 +1,88 @@
 /**
  * Lyrics Parsing Module
  *
- * This module provides unified lyrics parsing for various formats:
- * - Standard LRC format with optional word-by-word timing
- * - NetEase Cloud Music YRC format
- * - Translation merging from separate translation content
+ * Unified lyrics parsing for various formats:
+ * - Standard LRC with optional word-by-word timing
+ * - Netease YRC format with word timing
+ * - Translation merging
  *
- * Key features:
- * - Auto-detection of lyrics format
- * - Word-level timing support (enhanced LRC and YRC)
- * - Punctuation merging for proper display
- * - Translation line matching and merging
+ * Architecture:
+ * - Tokenizer-based parsing (not regex)
+ * - Single-pass processing
+ * - Inline duplicate handling
+ * - Automatic interlude insertion
  */
 
 import { LyricLine } from "./types";
 import { parseLrc } from "./lrc";
 import { parseNeteaseLyrics, isNeteaseFormat } from "./netease";
 import { mergeTranslations } from "./translation";
-import { processLyricsDurations } from "./utils";
 
 // Re-export types
 export type { LyricLine, LyricWord } from "./types";
 
-// Re-export individual parsers for direct use
+// Re-export parsers  
 export { parseLrc } from "./lrc";
 export { parseNeteaseLyrics, isNeteaseFormat } from "./netease";
 export { mergeTranslations, buildTranslationMap } from "./translation";
-export { processLyricsDurations } from "./utils";
+
+// Re-export utilities for backward compatibility
+export { INTERLUDE_TEXT } from "./parser";
+export { parseTime as parseTimeTag } from "./parser";
 
 /**
- * Parse lyrics content with automatic format detection.
+ * Parse lyrics with automatic format detection.
  *
- * @param content - Main lyrics content (LRC or YRC format)
- * @param translationContent - Optional translation lyrics content
- * @returns Parsed lyrics with translations merged
+ * @param content - Main lyrics content (LRC or YRC)
+ * @param translationContent - Optional translation content (LRC format)
+ * @param options - Optional YRC content for dual-format parsing
+ * @returns Parsed lyrics with translations and interludes
  *
  * @example
- * // Parse standard LRC
+ * // Standard LRC
  * const lyrics = parseLyrics("[00:12.34]Hello world");
  *
  * @example
- * // Parse with translation
- * const lyrics = parseLyrics(lrcContent, translationLrcContent);
+ * // With translation
+ * const lyrics = parseLyrics(lrcContent, translationContent);
  *
  * @example
- * // Parse NetEase YRC format
- * const lyrics = parseLyrics("[12340,2500](12340,500,0)Hello");
+ * // Netease YRC with LRC base
+ * const lyrics = parseLyrics(lrcContent, translation, { yrcContent });
  */
 export const parseLyrics = (
   content: string,
   translationContent?: string,
+  options?: { yrcContent?: string }
 ): LyricLine[] => {
-  if (!content || content.trim().length === 0) {
-    return [];
-  }
+  if (!content?.trim()) return [];
 
-  // Detect format and parse accordingly
+  // Detect format and parse
   let lines: LyricLine[];
 
-  if (isNeteaseFormat(content)) {
+  if (options?.yrcContent) {
+    // Use LRC as base, enrich with YRC word timing
+    lines = parseNeteaseLyrics(options.yrcContent, content);
+  } else if (isNeteaseFormat(content)) {
+    // Pure YRC format
     lines = parseNeteaseLyrics(content);
   } else {
+    // Standard LRC format
     lines = parseLrc(content);
   }
 
   // Merge translations if provided
-  if (translationContent && translationContent.trim().length > 0) {
+  if (translationContent?.trim()) {
     lines = mergeTranslations(lines, translationContent);
   }
 
-  // Process durations for lookahead
-  return processLyricsDurations(lines);
+  return lines;
 };
 
 /**
- * Utility to merge raw lyrics strings.
- * Simple concatenation with newline separator.
- *
- * @deprecated Use parseLyrics with translationContent parameter instead
+ * Merge raw lyrics strings.
+ * @deprecated Use parseLyrics with translationContent parameter
  */
 export const mergeLyrics = (original: string, translation: string): string => {
-  return original + "\n" + translation;
+  return `${original}\n${translation}`;
 };

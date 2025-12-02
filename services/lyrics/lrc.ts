@@ -1,113 +1,195 @@
+/**
+ * Standard LRC format parser.
+ * 
+ * Supports:
+ * - Basic LRC: [mm:ss.xx]lyrics
+ * - Enhanced LRC: [mm:ss.xx]<mm:ss.xx>word1<mm:ss.xx>word2
+ * - Multiple timestamps: [mm:ss.xx][mm:ss.xx]same lyrics
+ * 
+ * Features:
+ * - Single-pass parsing
+ * - Inline duplicate merging
+ * - Inline interlude insertion
+ * - Word-level timing support
+ */
+
+import { LyricLine, LyricWord, isMetadataLine } from "./types";
 import {
-  LyricLine,
-  LyricWord,
-  ParsedLineData,
-  isMetadataLine,
-} from "./types";
-import {
-  LRC_LINE_REGEX,
-  parseTimeTag,
+  parseTime,
   createWord,
-  getEntryDisplayText,
-  hasMeaningfulContent,
-  fixWordEndTimes,
-  mergePunctuationWords,
-  processLyricsDurations,
+  createLine,
+  mergePunctuation,
   insertInterludes,
-} from "./utils";
+  addDurations,
+  INTERLUDE_TEXT,
+} from "./parser";
 
 /**
- * Enhanced word tag regex for standard LRC: <mm:ss.xx>word
- * Example: <00:12.34>Hello<00:12.56>World
+ * Token types for LRC parsing.
  */
-const WORD_TAG_REGEX = /<(\d{2}):(\d{2})\.(\d{2,3})>([^<]*)/g;
+type LrcToken =
+  | { type: "time"; value: number; raw: string }
+  | { type: "word_time"; value: number; raw: string }
+  | { type: "text"; value: string }
+  | { type: "metadata"; key: string; value: string };
 
 /**
- * Parse inline word timing tags from LRC content.
- * Returns parsed words and the full text without tags.
- *
- * Note: Word start time may differ from line start time.
- * The line time indicates when the line should be highlighted,
- * while word times indicate individual word timing within the line.
+ * Tokenize LRC line into structured tokens.
  */
-const parseWordTags = (
-  content: string,
-): { text: string; words: LyricWord[]; tagCount: number } => {
-  const words: LyricWord[] = [];
-  const matches = [...content.matchAll(WORD_TAG_REGEX)];
-
-  if (matches.length > 0) {
-    matches.forEach((match, index) => {
-      const wordTime = parseTimeTag(`${match[1]}:${match[2]}.${match[3]}`);
-      const wordText = match[4];
-
-      // Calculate end time from next word or estimate
-      let endTime: number;
-      if (index < matches.length - 1) {
-        const nextMatch = matches[index + 1];
-        endTime = parseTimeTag(`${nextMatch[1]}:${nextMatch[2]}.${nextMatch[3]}`);
-      } else {
-        // Last word: estimate 1 second duration
-        endTime = wordTime + 1.0;
-      }
-
-      if (wordText) {
-        words.push(createWord(wordText, wordTime, endTime));
-      }
-    });
-  }
-
-  // Extract full text by removing all tags
-  const fullText = content.replace(/<[^>]+>/g, "").trim();
-
-  // Merge punctuation-only words with the previous word
-  const mergedWords = mergePunctuationWords(words);
-
-  return { text: fullText, words: mergedWords, tagCount: matches.length };
-};
-
-/**
- * Parse a single standard LRC line.
- * Format: [mm:ss.xx]text or [mm:ss.xx][mm:ss.xx]text
- */
-const parseLrcLine = (
-  line: string,
-  originalIndex: number,
-): ParsedLineData[] => {
+const tokenizeLine = (line: string): LrcToken[] => {
   const trimmed = line.trim();
   if (!trimmed) return [];
 
-  // Match all timestamps: [mm:ss.xx]
-  const timeMatches = [...trimmed.matchAll(/\[(\d{2}):(\d{2})\.(\d{2,3})\]/g)];
-  if (timeMatches.length === 0) return [];
+  const tokens: LrcToken[] = [];
+  let cursor = 0;
 
-  // The content is everything after the last timestamp
-  const lastMatch = timeMatches[timeMatches.length - 1];
-  const contentStartIndex = lastMatch.index! + lastMatch[0].length;
-  const content = trimmed.slice(contentStartIndex).trim();
+  // Extract time tags: [mm:ss.xx]
+  const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/g;
+  let match: RegExpExecArray | null;
 
-  const { text, words, tagCount } = parseWordTags(content);
-  const isMetadata = isMetadataLine(text);
+  while ((match = timeRegex.exec(trimmed)) !== null) {
+    const timeStr = `${match[1]}:${match[2]}.${match[3]}`;
+    tokens.push({
+      type: "time",
+      value: parseTime(timeStr),
+      raw: match[0],
+    });
+    cursor = match.index + match[0].length;
+  }
 
-  return timeMatches.map((match) => {
-    const time = parseTimeTag(`${match[1]}:${match[2]}.${match[3]}`);
-    return {
-      time,
-      text,
-      words: words.map(w => ({ ...w })), // Clone words to avoid reference issues if needed
-      tagCount,
-      originalIndex,
-      isMetadata,
-    };
-  });
+  if (tokens.length === 0) return [];
+
+  // Extract content after last time tag
+  const content = trimmed.slice(cursor).trim();
+
+  // Check if this is metadata (e.g., [ar:artist])
+  const metaMatch = trimmed.match(/^\[([a-z]+):(.+)\]$/);
+  if (metaMatch && tokens.length === 0) {
+    tokens.push({
+      type: "metadata",
+      key: metaMatch[1],
+      value: metaMatch[2],
+    });
+    return tokens;
+  }
+
+  // Parse word timing tags: <mm:ss.xx>word
+  const wordRegex = /<(\d{2}):(\d{2})\.(\d{2,3})>([^<]*)/g;
+  const wordMatches = [...content.matchAll(wordRegex)];
+
+  if (wordMatches.length > 0) {
+    // Has word-level timing
+    for (const m of wordMatches) {
+      tokens.push({
+        type: "word_time",
+        value: parseTime(`${m[1]}:${m[2]}.${m[3]}`),
+        raw: m[4],
+      });
+    }
+  } else if (content) {
+    // No word timing, just text
+    tokens.push({
+      type: "text",
+      value: content,
+    });
+  }
+
+  return tokens;
 };
 
 /**
- * Group lines by similar timestamps and merge duplicates.
- * Returns the main line with translation from grouped lines.
+ * Parse word timing tokens into words with start/end times.
  */
-const groupAndMergeLines = (entries: ParsedLineData[]): LyricLine[] => {
-  const result: (LyricLine & { _originalIndex: number })[] = [];
+const parseWords = (tokens: LrcToken[]): { words: LyricWord[]; text: string } => {
+  const wordTokens = tokens.filter(t => t.type === "word_time");
+  if (wordTokens.length === 0) {
+    return { words: [], text: "" };
+  }
+
+  const words: LyricWord[] = [];
+  let fullText = "";
+
+  for (let i = 0; i < wordTokens.length; i++) {
+    const token = wordTokens[i] as Extract<LrcToken, { type: "word_time" }>;
+    const wordText = token.raw;
+    const startTime = token.value;
+
+    // Calculate end time from next word or estimate
+    const nextToken = wordTokens[i + 1] as Extract<LrcToken, { type: "word_time" }> | undefined;
+    const endTime = nextToken ? nextToken.value : startTime + 1.0;
+
+    fullText += wordText;
+    if (wordText) {
+      words.push(createWord(wordText, startTime, endTime));
+    }
+  }
+
+  return {
+    words: mergePunctuation(words),
+    text: fullText,
+  };
+};
+
+/**
+ * Parsed line data before grouping.
+ */
+interface ParsedLine {
+  time: number;
+  text: string;
+  words: LyricWord[];
+  hasWordTiming: boolean;
+  originalIndex: number;
+  isMetadata: boolean;
+}
+
+/**
+ * Parse all lines and group by timestamp.
+ */
+const parseAndGroup = (content: string): LyricLine[] => {
+  const lines = content.split("\n");
+  const parsed: ParsedLine[] = [];
+
+  lines.forEach((line, index) => {
+    const tokens = tokenizeLine(line);
+    if (tokens.length === 0) return;
+
+    // Skip metadata tokens
+    if (tokens[0].type === "metadata") return;
+
+    const timeTags = tokens.filter(t => t.type === "time") as Extract<LrcToken, { type: "time" }>[];
+    if (timeTags.length === 0) return;
+
+    // Parse words and text
+    const { words, text } = parseWords(tokens);
+    const textContent = text || (tokens.find(t => t.type === "text") as Extract<LrcToken, { type: "text" }>)?.value || "";
+
+    // Create entry for each timestamp
+    for (const timeTag of timeTags) {
+      parsed.push({
+        time: timeTag.value,
+        text: textContent,
+        words: words.map(w => ({ ...w })),
+        hasWordTiming: words.length > 0,
+        originalIndex: index,
+        isMetadata: isMetadataLine(textContent),
+      });
+    }
+  });
+
+  // Sort by time, then by original index
+  parsed.sort((a, b) => {
+    const timeDiff = a.time - b.time;
+    return Math.abs(timeDiff) > 0.01 ? timeDiff : a.originalIndex - b.originalIndex;
+  });
+
+  return groupDuplicates(parsed);
+};
+
+/**
+ * Group lines with same timestamp and merge duplicates.
+ */
+const groupDuplicates = (entries: ParsedLine[]): LyricLine[] => {
+  const result: LyricLine[] = [];
   let i = 0;
 
   while (i < entries.length) {
@@ -115,104 +197,89 @@ const groupAndMergeLines = (entries: ParsedLineData[]): LyricLine[] => {
     const group = [current];
     let j = i + 1;
 
-    // Group lines within 0.1s threshold (strict for standard LRC)
-    while (
-      j < entries.length &&
-      Math.abs(entries[j].time - current.time) < 0.1
-    ) {
+    // Group entries within 0.1s
+    while (j < entries.length && Math.abs(entries[j].time - current.time) < 0.1) {
       group.push(entries[j]);
       j++;
     }
 
-    // Sort group: more word tags = higher priority, then by original index
+    // Sort by priority: word timing > original order
     group.sort((a, b) => {
-      if (a.tagCount !== b.tagCount) return b.tagCount - a.tagCount;
+      if (a.hasWordTiming !== b.hasWordTiming) {
+        return a.hasWordTiming ? -1 : 1;
+      }
       return a.originalIndex - b.originalIndex;
     });
 
     // Find main line (non-metadata with content)
-    const main =
-      group.find((entry) => !entry.isMetadata && hasMeaningfulContent(entry)) ??
-      group.find((entry) => hasMeaningfulContent(entry)) ??
-      group[0];
+    const main = group.find(e => !e.isMetadata && e.text.trim()) ?? group[0];
 
-    // Skip pure metadata lines
+    // Skip metadata-only lines
     if (main.isMetadata) {
       i = j;
       continue;
     }
 
-    const mainText = getEntryDisplayText(main) || main.text || "";
-    const normalizedMain = mainText.toLowerCase();
+    // Handle empty lines as interludes
+    if (!main.text.trim()) {
+      result.push(createLine(main.time, INTERLUDE_TEXT, { isInterlude: true }));
+      i = j;
+      continue;
+    }
 
-    // Extract translations from other lines in the group
-    const translationParts = group
-      .filter((entry) => entry !== main)
-      .filter((entry) => !entry.isMetadata && hasMeaningfulContent(entry))
-      .map((entry) => getEntryDisplayText(entry))
-      .filter(
-        (text) =>
-          text.length > 0 &&
-          (!normalizedMain || text.toLowerCase() !== normalizedMain),
-      );
+    // Collect translations from other lines in group
+    const mainNormalized = main.text.toLowerCase();
+    const translations = group
+      .filter(e => e !== main && !e.isMetadata && e.text.trim())
+      .map(e => e.text.trim())
+      .filter(t => t && t.toLowerCase() !== mainNormalized);
 
-    const translation =
-      translationParts.length > 0 ? translationParts.join("\n") : undefined;
-
-    result.push({
-      time: main.time,
-      text: mainText,
-      ...(main.words && main.words.length > 0 && { words: main.words }),
-      ...(translation && { translation }),
-      isPreciseTiming: false,
-      _originalIndex: main.originalIndex,
-    });
+    result.push(
+      createLine(main.time, main.text, {
+        words: main.words.length > 0 ? main.words : undefined,
+        translation: translations.length > 0 ? translations.join("\n") : undefined,
+        isPreciseTiming: false,
+      })
+    );
 
     i = j;
   }
 
-  return result.map(({ _originalIndex, ...rest }) => rest);
+  return result;
+};
+
+/**
+ * Fix word end times based on next line start.
+ */
+const fixWordTiming = (lines: LyricLine[]): void => {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.isPreciseTiming || !line.words?.length) continue;
+
+    const nextTime = lines[i + 1]?.time ?? line.time + 5;
+    const lastWord = line.words[line.words.length - 1];
+    const duration = nextTime - lastWord.startTime;
+    lastWord.endTime = lastWord.startTime + Math.min(duration, 5);
+  }
 };
 
 /**
  * Parse standard LRC format lyrics.
- *
- * Supports:
- * - Basic LRC: [mm:ss.xx]lyrics text
- * - Enhanced LRC with word timing: [mm:ss.xx]<mm:ss.xx>word1<mm:ss.xx>word2
- *
- * Note: Line time represents when the line becomes active.
- * Word times (if present) indicate individual word highlighting,
- * which may start slightly after the line time.
+ * 
+ * Single-pass parser that:
+ * 1. Tokenizes and parses all lines
+ * 2. Groups and merges duplicates inline
+ * 3. Inserts interludes for gaps
+ * 4. Adds duration metadata
  */
 export const parseLrc = (content: string): LyricLine[] => {
-  const lines = content.split("\n");
-  const entries: ParsedLineData[] = [];
+  if (!content?.trim()) return [];
 
-  // First pass: parse all lines
-  lines.forEach((line, index) => {
-    const parsed = parseLrcLine(line, index);
-    if (parsed.length > 0) {
-      entries.push(...parsed);
-    }
-  });
+  const lines = parseAndGroup(content);
 
-  // Sort by time, using originalIndex for stability
-  entries.sort((a, b) => {
-    const diff = a.time - b.time;
-    if (Math.abs(diff) > 0.01) return diff;
-    return a.originalIndex - b.originalIndex;
-  });
+  fixWordTiming(lines);
 
-  // Group and merge lines with same timestamp
-  const result = groupAndMergeLines(entries);
+  const withInterludes = insertInterludes(lines);
 
-  // Fix word end times for non-precise timing
-  fixWordEndTimes(result);
-
-  // Calculate durations first
-  const withDurations = processLyricsDurations(result);
-
-  // Insert interludes
-  return withDurations;
+  return addDurations(withInterludes);
 };

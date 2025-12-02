@@ -255,8 +255,10 @@ export const usePlayer = ({
   );
 
   const mergeLyricsWithMetadata = useCallback(
-    (result: { lrc: string; tLrc?: string; metadata: string[] }) => {
-      const parsed = parseLyrics(result.lrc, result.tLrc);
+    (result: { lrc: string; yrc?: string; tLrc?: string; metadata: string[] }) => {
+      const parsed = parseLyrics(result.lrc, result.tLrc, {
+        yrcContent: result.yrc,
+      });
       const metadataCount = result.metadata.length;
       const metadataLines = result.metadata.map((text, idx) => ({
         time: -0.1 * (metadataCount - idx),
