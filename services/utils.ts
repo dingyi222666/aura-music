@@ -190,7 +190,7 @@ export const extractColors = async (imageSrc: string): Promise<string[]> => {
   try {
     const img = await loadImageElementWithCache(imageSrc);
     const colorThief = new ColorThief();
-    const palette = colorThief.getPalette(img, 5);
+    const palette = colorThief.getPalette(img, 7);
 
     if (!palette || palette.length === 0) {
       return [];
@@ -210,7 +210,7 @@ export const extractColors = async (imageSrc: string): Promise<string[]> => {
       return satB - satA;
     });
 
-    const topColors = candidates.slice(0, 4);
+    const topColors = candidates.slice(0, 7);
     return topColors.map((c: number[]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`);
   } catch (err) {
     console.warn("Color extraction failed", err);

@@ -3,6 +3,8 @@ const defaultColors = [
   "rgb(100, 40, 60)",
   "rgb(20, 20, 40)",
   "rgb(40, 40, 90)",
+  "rgb(30, 30, 80)",
+  "rgb(80, 20, 40)",
 ];
 
 const vertexShaderSource = `
@@ -21,6 +23,8 @@ const fragmentShaderSource = `
   uniform vec3 uColor2;
   uniform vec3 uColor3;
   uniform vec3 uColor4;
+  uniform vec3 uColor5;
+  uniform vec3 uColor6;
 
   #define S(a,b,t) smoothstep(a,b,t)
 
@@ -70,8 +74,11 @@ const fragmentShaderSource = `
 
       vec3 layer1 = mix(uColor1, uColor2, S(-0.3, 0.2, (tuv * Rot(radians(-5.0))).x));
       vec3 layer2 = mix(uColor3, uColor4, S(-0.3, 0.2, (tuv * Rot(radians(-5.0))).x));
+      vec3 layer3 = mix(uColor5, uColor6, S(-0.3, 0.2, (tuv * Rot(radians(-5.0))).x));
 
-      vec3 finalComp = mix(layer1, layer2, S(0.5, -0.3, tuv.y));
+      vec3 mix23 = mix(layer2, layer3, S(0.5, -0.3, tuv.y));
+      vec3 finalComp = mix(layer1, mix23, S(-0.3, 0.2, (tuv * Rot(radians(45.0))).y));
+      
       vec3 col = finalComp;
 
       gl_FragColor = vec4(col, 1.0);
@@ -98,6 +105,8 @@ let color1Uniform: WebGLUniformLocation | null = null;
 let color2Uniform: WebGLUniformLocation | null = null;
 let color3Uniform: WebGLUniformLocation | null = null;
 let color4Uniform: WebGLUniformLocation | null = null;
+let color5Uniform: WebGLUniformLocation | null = null;
+let color6Uniform: WebGLUniformLocation | null = null;
 
 let timeAccumulator = 0;
 let lastFrameTime = 0;
@@ -167,6 +176,8 @@ const initProgram = () => {
   color2Uniform = gl.getUniformLocation(prog, "uColor2");
   color3Uniform = gl.getUniformLocation(prog, "uColor3");
   color4Uniform = gl.getUniformLocation(prog, "uColor4");
+  color5Uniform = gl.getUniformLocation(prog, "uColor5");
+  color6Uniform = gl.getUniformLocation(prog, "uColor6");
 
   program = prog;
   return true;
@@ -190,14 +201,21 @@ const render = (now: number) => {
     timeAccumulator += delta;
   }
 
-  const colors = currentColors.length >= 4 ? currentColors : defaultColors;
-  const [c1, c2, c3, c4] = colors.map(parseColor);
+  // Ensure we have 6 colors
+  const colors = [...currentColors];
+  while (colors.length < 6) {
+    colors.push(defaultColors[colors.length % defaultColors.length]);
+  }
+
+  const [c1, c2, c3, c4, c5, c6] = colors.map(parseColor);
 
   gl.uniform1f(timeUniform, timeAccumulator * 0.0005);
   gl.uniform3f(color1Uniform, c1[0], c1[1], c1[2]);
   gl.uniform3f(color2Uniform, c2[0], c2[1], c2[2]);
   gl.uniform3f(color3Uniform, c3[0], c3[1], c3[2]);
   gl.uniform3f(color4Uniform, c4[0], c4[1], c4[2]);
+  gl.uniform3f(color5Uniform, c5[0], c5[1], c5[2]);
+  gl.uniform3f(color6Uniform, c6[0], c6[1], c6[2]);
 
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 };

@@ -25,7 +25,7 @@ import {
   INTERLUDE_TEXT,
 } from "./parser";
 
-const MAX_WORD_DURATION = 2.0; // Max duration per word in seconds
+const MAX_WORD_DURATION = 10.0; // Max duration per word in seconds
 
 /**
  * Token types for Netease YRC parsing.
@@ -419,9 +419,9 @@ const alignWordsWithText = (text: string, words: LyricWord[]): LyricWord[] => {
 
     return chunk
       ? {
-          ...word,
-          text: chunk,
-        }
+        ...word,
+        text: chunk,
+      }
       : { ...word };
   });
 

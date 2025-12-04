@@ -115,13 +115,13 @@ const LyricsView: React.FC<LyricsViewProps> = ({
 
     lyrics.forEach((line, index) => {
       const isInterlude = line.isInterlude || line.text === "...";
-      
+
       let duration = 0;
       if (isInterlude) {
-         const nextLine = lyrics[index + 1];
-         if (nextLine) {
-             duration = nextLine.time - line.time;
-         }
+        const nextLine = lyrics[index + 1];
+        if (nextLine) {
+          duration = nextLine.time - line.time;
+        }
       }
 
       const lyricLine = isInterlude
@@ -305,9 +305,23 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       visualTime += dt * playbackRate;
 
       const drift = targetTime - visualTime;
-      // Exponential smoothing to catch up to target time
-      // Balances smoothness with responsiveness
-      const tau = 0.35;
+
+      // Adaptive smoothing strategy
+      // 1. If drift is small (< 0.1s), trust our predicted time (very weak correction)
+      // 2. If drift is moderate (< 0.5s), gentle correction
+      // 3. If drift is large, stronger correction
+      // This prevents "micro-stuttering" caused by the visual time being pulled back 
+      // to a stale targetTime between updates.
+
+      let tau = 0.5;
+      if (Math.abs(drift) < 0.0001) {
+        tau = 1.5; // Very stable, trust prediction
+      } else if (Math.abs(drift) < 0.05) {
+        tau = 0.4; // Gentle sync
+      } else {
+        tau = 0.2; // Fast catch-up
+      }
+
       const smoothing = 1 - Math.exp(-dt / tau);
       visualTime += drift * smoothing;
     } else {
@@ -494,11 +508,11 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     if (!el) return;
 
     const onWheel = (e: WheelEvent) => {
-       // We need to call the handler from useLyricsPhysics
-       // But handlers is recreated on render? No, it depends on refs mostly but returned new object
-       // We can use a ref to the latest handler or just disable the warning if we can't preventDefault?
-       // Actually, to prevent default, we MUST attach with passive: false.
-       handlers.onWheel(e as unknown as React.WheelEvent);
+      // We need to call the handler from useLyricsPhysics
+      // But handlers is recreated on render? No, it depends on refs mostly but returned new object
+      // We can use a ref to the latest handler or just disable the warning if we can't preventDefault?
+      // Actually, to prevent default, we MUST attach with passive: false.
+      handlers.onWheel(e as unknown as React.WheelEvent);
     };
 
     el.addEventListener('wheel', onWheel, { passive: false });
@@ -508,7 +522,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
   // Let's check useLyricsPhysics. It returns a new object { ... } every render.
   // This is suboptimal for useEffect deps.
   // However, fixing the "unable to preventDefault" is the priority.
-  
+
   return (
     <div
       ref={containerRef}
