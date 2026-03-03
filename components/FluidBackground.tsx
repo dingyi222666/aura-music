@@ -44,6 +44,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
   const startTimeOffsetRef = useRef(0);
   const lastPausedTimeRef = useRef(0);
   const colorsRef = useRef<string[] | undefined>(colors);
+  const coverUrlRef = useRef<string | undefined>(coverUrl);
   const [canvasInstanceKey, setCanvasInstanceKey] = useState(0);
   const previousModeRef = useRef(isMobileLayout);
 
@@ -57,6 +58,10 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
   useEffect(() => {
     colorsRef.current = colors;
   }, [colors]);
+
+  useEffect(() => {
+    coverUrlRef.current = coverUrl;
+  }, [coverUrl]);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -208,6 +213,12 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
       canvas.height = window.innerHeight;
       const workerRenderer = new WebWorkerBackgroundRender(canvas);
       workerRenderer.start(colorsRef.current ?? []);
+
+      // Send cover image to worker if we have one
+      if (coverUrlRef.current) {
+        workerRenderer.setCoverImage(coverUrlRef.current);
+      }
+
       rendererRef.current = workerRenderer;
       return () => {
         workerRenderer.stop();
@@ -228,6 +239,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
     };
   }, [isMobileLayout, renderGradientFrame, renderMobileFrame, canvasInstanceKey]);
 
+  // Sync colors, playing state, and cover image to the worker
   useEffect(() => {
     const renderer = rendererRef.current;
     if (renderer instanceof WebWorkerBackgroundRender) {
@@ -237,6 +249,14 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
       renderer.setPaused(!isPlaying);
     }
   }, [colors, isPlaying]);
+
+  // Send cover image updates to worker
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (renderer instanceof WebWorkerBackgroundRender && coverUrl) {
+      renderer.setCoverImage(coverUrl);
+    }
+  }, [coverUrl]);
 
   const canvasKey = `${isMobileLayout ? "mobile" : "desktop"}-${canvasInstanceKey}`;
 
