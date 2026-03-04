@@ -21,11 +21,15 @@ import {
   mergePunctuation,
   normalizeText,
   insertInterludes,
+  filterShortInterludes,
   addDurations,
   INTERLUDE_TEXT,
 } from "./parser";
 
 const MAX_WORD_DURATION = 10.0; // Max duration per word in seconds
+const STRICT_ENRICH_TIME_WINDOW = 2.5; // Prefer near-time matches first
+const RELAXED_ENRICH_TIME_WINDOW = 8.0; // Fallback for drifted LRC/YRC timestamps
+const MIN_SHIFTED_WORD_DURATION = 0.02;
 
 /**
  * Token types for Netease YRC parsing.
@@ -323,42 +327,52 @@ const enrichWithWordTiming = (lrcLines: LyricLine[], yrcTokens: NeteaseToken[]):
     const targetNormalized = normalizeText(line.text);
     if (!targetNormalized) return line;
 
-    // Find matching YRC segments
-    let bestMatch: { indexes: number[]; score: number } | null = null;
+    const findBestMatch = (maxTimeDrift: number): { indexes: number[]; score: number } | null => {
+      let bestMatch: { indexes: number[]; score: number } | null = null;
 
-    for (let start = 0; start < yrcData.length; start++) {
-      if (yrcData[start].used) continue;
+      for (let start = 0; start < yrcData.length; start++) {
+        if (yrcData[start].used) continue;
 
-      const timeDiff = Math.abs(yrcData[start].token.time - line.time);
-      if (timeDiff > 2.5) continue;
+        const timeDiff = Math.abs(yrcData[start].token.time - line.time);
+        if (timeDiff > maxTimeDrift) continue;
 
-      if (!targetNormalized.startsWith(yrcData[start].normalized)) continue;
+        if (!targetNormalized.startsWith(yrcData[start].normalized)) continue;
 
-      // Try to match consecutive segments
-      let combined = yrcData[start].normalized;
-      const indexes = [start];
+        // Try to match consecutive segments
+        let combined = yrcData[start].normalized;
+        const indexes = [start];
 
-      while (
-        combined.length < targetNormalized.length &&
-        indexes[indexes.length - 1] + 1 < yrcData.length &&
-        !yrcData[indexes[indexes.length - 1] + 1].used
-      ) {
-        const next = yrcData[indexes[indexes.length - 1] + 1];
-        const prospective = combined + next.normalized;
+        while (
+          combined.length < targetNormalized.length &&
+          indexes[indexes.length - 1] + 1 < yrcData.length &&
+          !yrcData[indexes[indexes.length - 1] + 1].used
+        ) {
+          const next = yrcData[indexes[indexes.length - 1] + 1];
+          const prospective = combined + next.normalized;
 
-        if (!targetNormalized.startsWith(prospective)) break;
+          if (!targetNormalized.startsWith(prospective)) break;
 
-        combined = prospective;
-        indexes.push(indexes[indexes.length - 1] + 1);
-      }
+          combined = prospective;
+          indexes.push(indexes[indexes.length - 1] + 1);
+        }
 
-      if (combined === targetNormalized) {
-        const score = timeDiff;
-        if (!bestMatch || score < bestMatch.score) {
-          bestMatch = { indexes, score };
+        if (combined === targetNormalized) {
+          const score = timeDiff;
+          if (!bestMatch || score < bestMatch.score) {
+            bestMatch = { indexes, score };
+          }
         }
       }
-    }
+
+      return bestMatch;
+    };
+
+    // First prefer close timestamps, then relax for known LRC/YRC drift cases.
+    const strictMatch = findBestMatch(STRICT_ENRICH_TIME_WINDOW);
+    const relaxedMatch = strictMatch
+      ? null
+      : findBestMatch(RELAXED_ENRICH_TIME_WINDOW);
+    const bestMatch = strictMatch ?? relaxedMatch;
 
     // Apply best match
     if (bestMatch) {
@@ -370,7 +384,17 @@ const enrichWithWordTiming = (lrcLines: LyricLine[], yrcTokens: NeteaseToken[]):
         words.push(...token.words.map(w => ({ ...w })));
       }
 
-      const adjustedWords = alignWordsWithText(line.text, words);
+      let adjustedWords = alignWordsWithText(line.text, words);
+
+      // If only the relaxed window matched, compensate global drift by
+      // shifting YRC word timings toward the LRC line start.
+      if (!strictMatch && relaxedMatch && bestMatch.indexes.length > 0) {
+        const anchorToken = yrcData[bestMatch.indexes[0]]?.token;
+        if (anchorToken?.type === "yrc") {
+          const offset = line.time - anchorToken.time;
+          adjustedWords = shiftWordTimings(adjustedWords, offset);
+        }
+      }
 
       return {
         ...line,
@@ -435,6 +459,25 @@ const alignWordsWithText = (text: string, words: LyricWord[]): LyricWord[] => {
   return adjusted;
 };
 
+const shiftWordTimings = (words: LyricWord[], offset: number): LyricWord[] => {
+  if (!words.length || !Number.isFinite(offset) || Math.abs(offset) < 0.001) {
+    return words;
+  }
+
+  return words.map(word => {
+    const shiftedStart = word.startTime + offset;
+    const shiftedEnd = word.endTime + offset;
+    const startTime = Math.max(0, shiftedStart);
+    const endTime = Math.max(startTime + MIN_SHIFTED_WORD_DURATION, shiftedEnd);
+
+    return {
+      ...word,
+      startTime,
+      endTime,
+    };
+  });
+};
+
 /**
  * Check if content is Netease format.
  */
@@ -465,14 +508,18 @@ export const parseNeteaseLyrics = (
 
   // If LRC content provided, use as base and enrich
   if (lrcContent?.trim()) {
-    const baseLines = parseLrc(lrcContent);
-    return addDurations(enrichWithWordTiming(baseLines, tokens));
+    const baseLines = parseLrc(lrcContent).filter(line => !line.isInterlude);
+    const enriched = enrichWithWordTiming(baseLines, tokens);
+    const withInterludes = insertInterludes(enriched);
+    const filtered = filterShortInterludes(withInterludes);
+    return addDurations(filtered);
   }
 
   // Otherwise parse YRC directly
   const lines = tokensToLines(tokens);
   const deduped = deduplicate(lines);
   const withInterludes = insertInterludes(deduped);
+  const filtered = filterShortInterludes(withInterludes);
 
-  return addDurations(withInterludes);
+  return addDurations(filtered);
 };

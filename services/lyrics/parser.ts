@@ -14,7 +14,8 @@ export const INTERLUDE_TEXT = "...";
 export const GAP_THRESHOLD = 10; // Seconds gap to insert interlude
 export const PRELUDE_THRESHOLD = 3; // Seconds before first lyric to insert prelude
 export const DEFAULT_DURATION = 4; // Default line duration estimate
-export const MIN_INTERLUDE_DURATION = 10; // Minimum silence to render interlude
+export const MIN_INTERLUDE_DURATION = 10; // Minimum silence to render interlude (for gap-based insertion)
+export const MIN_SOURCE_INTERLUDE_DURATION = 3; // Minimum duration for source-data interludes (empty lines)
 
 /**
  * Parse time tag string (mm:ss.xx, mm:ss.xxx, mm:ss:xx, mm:ss:xxx) to seconds.
@@ -135,6 +136,34 @@ export const mergePunctuation = (words: LyricWord[]): LyricWord[] => {
     }
 
     return result;
+};
+
+/**
+ * Remove source-data interludes that are too short (gap to next content line < threshold).
+ * This filters out empty lines from source data that were marked as interludes
+ * but have very short gaps (e.g. < 3s).
+ * Gap-based interludes inserted by insertInterludes are not affected since they
+ * already pass the GAP_THRESHOLD check.
+ */
+export const filterShortInterludes = (lines: LyricLine[]): LyricLine[] => {
+    return lines.filter((line, i) => {
+        if (!isInterlude(line)) return true;
+
+        // Find next content line
+        let nextContentTime: number | undefined;
+        for (let j = i + 1; j < lines.length; j++) {
+            if (hasContent(lines[j])) {
+                nextContentTime = lines[j].time;
+                break;
+            }
+        }
+
+        // If no next content line, keep the interlude (end of song)
+        if (nextContentTime === undefined) return true;
+
+        const duration = nextContentTime - line.time;
+        return duration >= MIN_SOURCE_INTERLUDE_DURATION;
+    });
 };
 
 /**

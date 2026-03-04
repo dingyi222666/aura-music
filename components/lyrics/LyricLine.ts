@@ -628,6 +628,9 @@ export class LyricLine implements ILyricLine {
 
     this.applyGlow(decayFactor);
 
+    // Regex to test if a character is punctuation (no letters, numbers, or CJK)
+    const punctuationTest = /^[^\p{L}\p{N}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u;
+
     chars.forEach((char, charIndex) => {
       const scale = charScales[charIndex];
       const lift = charLifts[charIndex];
@@ -638,6 +641,12 @@ export class LyricLine implements ILyricLine {
 
       if (opacity > 0.01) {
         this.ctx.save();
+
+        // Disable glow for punctuation characters
+        if (punctuationTest.test(char)) {
+          this.ctx.shadowBlur = 0;
+          this.ctx.shadowColor = "transparent";
+        }
 
         // Apply opacity
         this.ctx.globalAlpha = opacity;

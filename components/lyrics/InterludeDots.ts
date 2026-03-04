@@ -67,10 +67,13 @@ export class InterludeDots implements ILyricLine {
         
         // Calculate dt with clamping to prevent physics explosions on re-entry
         let dt = this.lastDrawTime === -1 ? 0.016 : (now - this.lastDrawTime) / 1000;
+        // Clamp dt to prevent spring explosion when line re-enters viewport after being off-screen
+        dt = Math.min(dt, 0.1);
         this.lastDrawTime = now;
 
         // Determine target expansion state
         const currentTarget = this.springSystem.getTarget("expansion") || 0;
+        const currentExpansion = this.springSystem.getCurrent("expansion");
         const targetExpansion = isActive ? 1 : 0;
 
         // Detect transition from Active -> Inactive (Exit animation start)
@@ -79,6 +82,12 @@ export class InterludeDots implements ILyricLine {
             // Apply a positive velocity to create a "pop" effect before shrinking
             // The spring will pull it to 0, but velocity will push it up first.
             this.springSystem.setVelocity("expansion", 8); 
+        }
+
+        // If we just became active from a cold state (e.g. seek), reset spring to 0
+        // so it animates cleanly from collapsed to expanded without physics explosion
+        if (currentTarget === 0 && targetExpansion === 1 && currentExpansion < 0.01) {
+            this.springSystem.setValue("expansion", 0);
         }
 
         this.springSystem.setTarget("expansion", targetExpansion, INTERLUDE_SPRING);

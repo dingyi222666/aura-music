@@ -28,7 +28,7 @@ export { mergeTranslations, buildTranslationMap } from "./translation";
 
 // Re-export utilities for backward compatibility
 export { INTERLUDE_TEXT } from "./parser";
-export { parseTime as parseTimeTag } from "./parser";
+export { parseTime as parseTimeTag, filterShortInterludes } from "./parser";
 
 /**
  * Parse lyrics with automatic format detection.

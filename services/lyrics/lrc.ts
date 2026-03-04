@@ -20,6 +20,7 @@ import {
   createLine,
   mergePunctuation,
   insertInterludes,
+  filterShortInterludes,
   addDurations,
   INTERLUDE_TEXT,
 } from "./parser";
@@ -279,6 +280,7 @@ export const parseLrc = (content: string): LyricLine[] => {
   fixWordTiming(lines);
 
   const withInterludes = insertInterludes(lines);
+  const filtered = filterShortInterludes(withInterludes);
 
-  return addDurations(withInterludes);
+  return addDurations(filtered);
 };
