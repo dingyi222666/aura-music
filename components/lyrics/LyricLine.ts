@@ -145,94 +145,62 @@ export class LyricLine implements ILyricLine {
       this.ctx.fill();
     }
 
-    // 2. Determine Active Line Context
-    let activeLineY: number | null = null;
-    let cursorX = 0;
-    let activeWords: WordLayout[] = [];
-
-    if (isActive && hasTimedWords) {
-      const activeIdx = this.layout.words.findIndex(
-        (w) => currentTime >= w.startTime && currentTime < w.endTime,
-      );
-
-      let currentWord: WordLayout | null = null;
-      if (activeIdx !== -1) {
-        currentWord = this.layout.words[activeIdx];
-      } else {
-        const nextWordIdx = this.layout.words.findIndex(
-          (w) => w.startTime > currentTime,
-        );
-        if (nextWordIdx > 0) currentWord = this.layout.words[nextWordIdx - 1];
-        else if (nextWordIdx === -1)
-          currentWord = this.layout.words[this.layout.words.length - 1];
-        else currentWord = this.layout.words[0];
-      }
-
-      if (currentWord) {
-        activeLineY = currentWord.y;
-        activeWords = this.layout.words.filter(
-          (w) => Math.abs(w.y - activeLineY!) < 5,
-        );
-        // Cursor calculation
-        if (activeIdx !== -1) {
-          const w = this.layout.words[activeIdx];
-          const p = (currentTime - w.startTime) / (w.endTime - w.startTime);
-          cursorX = w.x + w.width * p;
-        } else {
-          // Simplified gap logic
-          const nextIdx = this.layout.words.findIndex(
-            (w) => w.startTime > currentTime,
-          );
-          if (nextIdx > 0)
-            cursorX =
-              this.layout.words[nextIdx - 1].x +
-              this.layout.words[nextIdx - 1].width;
-          else if (nextIdx === -1) {
-            const last = this.layout.words[this.layout.words.length - 1];
-            cursorX = last.x + last.width;
-          } else cursorX = 0;
-        }
-      }
-    }
-
-    // 3. Rendering Strategy
-    const firstWord = this.layout.words[0];
-    const lastWord = this.layout.words[this.layout.words.length - 1];
-    const lineDuration =
-      firstWord && lastWord ? lastWord.endTime - firstWord.startTime : 0;
+    // 2. Rendering Strategy
     const wordCount = this.layout.words.length;
     let fastWordCount = 0;
     for (const w of this.layout.words) {
       if (w.endTime - w.startTime < 0.2) fastWordCount++;
     }
 
-    // Skip karaoke if line is too short (<0.8s) OR >60% of words are very fast (<0.2s)
+    // Skip karaoke if >90% of words are very fast (<0.2s)
     const isFastLine = wordCount > 0 && fastWordCount / wordCount > 0.9;
 
     if (isActive && (!hasTimedWords || isFastLine)) {
       // CASE: Active but standard text (no timing) -> Pure White
       this.ctx.fillStyle = "#FFFFFF";
       this.layout.words.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
-    } else if (isActive && activeLineY !== null && activeWords.length > 0) {
-      // CASE: Active with Timing -> Fluid Animation
-
-      // Render static inactive lines first
-      this.ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    } else if (isActive) {
+      // CASE: Active with Timing -> Per-visual-line animation
+      // Group words by their visual line Y so each wrapped line can
+      // animate independently, preventing abrupt animation cutoff when
+      // the singing cursor moves to the next visual line.
+      const FLOAT_UP = 0.05 * mainHeight;
+      const lineGroups = new Map<number, WordLayout[]>();
       this.layout.words.forEach((w) => {
-        if (Math.abs(w.y - activeLineY!) >= 5) {
-          // Past lines white, Future dim
-          if (w.y < activeLineY!) {
-            this.ctx.fillStyle = "#FFFFFF";
-            this.ctx.fillText(w.text, w.x, w.y - 2); // Static Lift for past lines
-          } else {
-            this.ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-            this.ctx.fillText(w.text, w.x, w.y);
-          }
-        }
+        const key = Math.round(w.y);
+        if (!lineGroups.has(key)) lineGroups.set(key, []);
+        lineGroups.get(key)!.push(w);
       });
 
-      // Render Active Line with Word-by-Word Effect
-      this.drawActiveWords(activeWords, currentTime);
+      lineGroups.forEach((lineWords) => {
+        // A visual line needs animation if any word is currently being
+        // sung OR its lift/glow animation hasn't finished yet.
+        // Lift animation duration: max(1.0, word_duration) from startTime,
+        // so grace = max(0, 1.0 - duration) after endTime.
+        const needsAnimation = lineWords.some((w) => {
+          const duration = w.endTime - w.startTime;
+          const elapsed = currentTime - w.startTime;
+          const animDuration = Math.max(1.0, duration);
+          return elapsed >= 0 && elapsed < animDuration;
+        });
+
+        const allPast = lineWords.every((w) => currentTime >= w.endTime);
+
+        if (needsAnimation) {
+          // Animated line — drawActiveWords handles lift, glow, gradient
+          this.drawActiveWords(lineWords, currentTime);
+        } else if (allPast) {
+          // Completed line → white with static lift matching FLOAT_UP
+          this.ctx.fillStyle = "#FFFFFF";
+          lineWords.forEach((w) =>
+            this.ctx.fillText(w.text, w.x, w.y - FLOAT_UP),
+          );
+        } else {
+          // Future line → dim
+          this.ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+          lineWords.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
+        }
+      });
     } else {
       // CASE: Completely Inactive Line -> Dim
       this.ctx.fillStyle = "rgba(255, 255, 255, 0.3)";

@@ -30,6 +30,8 @@ const MAX_WORD_DURATION = 10.0; // Max duration per word in seconds
 const STRICT_ENRICH_TIME_WINDOW = 2.5; // Prefer near-time matches first
 const RELAXED_ENRICH_TIME_WINDOW = 8.0; // Fallback for drifted LRC/YRC timestamps
 const MIN_SHIFTED_WORD_DURATION = 0.02;
+const MIN_PARTIAL_MATCH_LENGTH = 6;
+const MIN_PARTIAL_MATCH_COVERAGE = 0.35;
 
 /**
  * Token types for Netease YRC parsing.
@@ -327,8 +329,11 @@ const enrichWithWordTiming = (lrcLines: LyricLine[], yrcTokens: NeteaseToken[]):
     const targetNormalized = normalizeText(line.text);
     if (!targetNormalized) return line;
 
-    const findBestMatch = (maxTimeDrift: number): { indexes: number[]; score: number } | null => {
-      let bestMatch: { indexes: number[]; score: number } | null = null;
+    const findBestMatch = (
+      maxTimeDrift: number,
+      allowPartial: boolean,
+    ): { indexes: number[]; score: number; isPartial: boolean } | null => {
+      let bestMatch: { indexes: number[]; score: number; isPartial: boolean } | null = null;
 
       for (let start = 0; start < yrcData.length; start++) {
         if (yrcData[start].used) continue;
@@ -359,20 +364,55 @@ const enrichWithWordTiming = (lrcLines: LyricLine[], yrcTokens: NeteaseToken[]):
         if (combined === targetNormalized) {
           const score = timeDiff;
           if (!bestMatch || score < bestMatch.score) {
-            bestMatch = { indexes, score };
+            bestMatch = { indexes, score, isPartial: false };
           }
+          continue;
+        }
+
+        if (!allowPartial) {
+          continue;
+        }
+
+        const coverage = combined.length / targetNormalized.length;
+        if (
+          combined.length < MIN_PARTIAL_MATCH_LENGTH ||
+          coverage < MIN_PARTIAL_MATCH_COVERAGE
+        ) {
+          continue;
+        }
+
+        // Lower score is better. Prefer higher text coverage first,
+        // then break ties by timestamp proximity.
+        const score = (1 - coverage) * 10 + timeDiff;
+        if (!bestMatch || score < bestMatch.score) {
+          bestMatch = { indexes, score, isPartial: true };
         }
       }
 
       return bestMatch;
     };
 
-    // First prefer close timestamps, then relax for known LRC/YRC drift cases.
-    const strictMatch = findBestMatch(STRICT_ENRICH_TIME_WINDOW);
-    const relaxedMatch = strictMatch
+    // Prefer exact + close matches, then allow partial text matches,
+    // and only then relax timestamp drift.
+    const strictExactMatch = findBestMatch(STRICT_ENRICH_TIME_WINDOW, false);
+    const strictPartialMatch = strictExactMatch
       ? null
-      : findBestMatch(RELAXED_ENRICH_TIME_WINDOW);
-    const bestMatch = strictMatch ?? relaxedMatch;
+      : findBestMatch(STRICT_ENRICH_TIME_WINDOW, true);
+    const relaxedExactMatch = strictExactMatch || strictPartialMatch
+      ? null
+      : findBestMatch(RELAXED_ENRICH_TIME_WINDOW, false);
+    const relaxedPartialMatch =
+      strictExactMatch || strictPartialMatch || relaxedExactMatch
+        ? null
+        : findBestMatch(RELAXED_ENRICH_TIME_WINDOW, true);
+
+    const bestMatch =
+      strictExactMatch ??
+      strictPartialMatch ??
+      relaxedExactMatch ??
+      relaxedPartialMatch;
+    const matchedWithRelaxedWindow =
+      bestMatch === relaxedExactMatch || bestMatch === relaxedPartialMatch;
 
     // Apply best match
     if (bestMatch) {
@@ -386,9 +426,12 @@ const enrichWithWordTiming = (lrcLines: LyricLine[], yrcTokens: NeteaseToken[]):
 
       let adjustedWords = alignWordsWithText(line.text, words);
 
-      // If only the relaxed window matched, compensate global drift by
-      // shifting YRC word timings toward the LRC line start.
-      if (!strictMatch && relaxedMatch && bestMatch.indexes.length > 0) {
+      // Relaxed-window matches and partial-text matches can carry noticeable
+      // drift against the displayed LRC line; shift timing toward line start.
+      if (
+        (matchedWithRelaxedWindow || bestMatch.isPartial) &&
+        bestMatch.indexes.length > 0
+      ) {
         const anchorToken = yrcData[bestMatch.indexes[0]]?.token;
         if (anchorToken?.type === "yrc") {
           const offset = line.time - anchorToken.time;
