@@ -210,12 +210,14 @@ const SmartImage: React.FC<SmartImageProps> = ({
         normalizedSize.height / imageElement.naturalHeight,
         1,
       );
-      const targetWidth = Math.max(1, Math.round(imageElement.naturalWidth * ratio));
-      const targetHeight = Math.max(1, Math.round(imageElement.naturalHeight * ratio));
+      const drawWidth = Math.max(1, Math.round(imageElement.naturalWidth * ratio));
+      const drawHeight = Math.max(1, Math.round(imageElement.naturalHeight * ratio));
+      const devicePixelRatio =
+        typeof window === "undefined" ? 1 : Math.max(1, window.devicePixelRatio || 1);
 
       const canvas = document.createElement("canvas");
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
+      canvas.width = Math.max(1, Math.round(drawWidth * devicePixelRatio));
+      canvas.height = Math.max(1, Math.round(drawHeight * devicePixelRatio));
 
       const ctx = canvas.getContext("2d");
       if (!ctx) {
@@ -223,7 +225,11 @@ const SmartImage: React.FC<SmartImageProps> = ({
         return;
       }
 
-      ctx.drawImage(imageElement, 0, 0, targetWidth, targetHeight);
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      ctx.drawImage(imageElement, 0, 0, drawWidth, drawHeight);
 
       try {
         canvas.toBlob(
