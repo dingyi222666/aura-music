@@ -38,12 +38,12 @@ const getLinePosSpring = (relativeIndex: number): SpringConfig => {
 
     // Far-off lines: still responsive
     if (dist > 8) {
-        return { mass: 1, stiffness: 90, damping: 22, precision: 0.1 };
+        return { mass: 1, stiffness: 160, damping: 28, precision: 0.1 };
     }
 
     // Exponential decay for cascading feel, but with a high floor
-    const base = 500;
-    const stiffness = Math.max(100, base * Math.pow(0.65, dist));
+    const base = 700;
+    const stiffness = Math.max(180, base * Math.pow(0.7, dist));
     const damping = Math.sqrt(stiffness) * 1.9; // Over-damped, no bounce
 
     return {
@@ -371,7 +371,7 @@ export const useLyricsPhysics = ({
                     // For future lines moving UP (after seek), use the stiffer of
                     // the index-based spring or a fast upward spring
                     if (relativeIndex > 0 && Math.abs(displacement) > 20) {
-                        const upwardStiffness = Math.max(springFromIndex.stiffness, 300);
+                        const upwardStiffness = Math.max(springFromIndex.stiffness, 450);
                         posConfig = { mass: 1, stiffness: upwardStiffness, damping: Math.sqrt(upwardStiffness) * 1.9, precision: 0.1 };
                     } else {
                         posConfig = springFromIndex;
