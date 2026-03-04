@@ -30,22 +30,21 @@ export interface LinePhysicsState {
 const getLinePosSpring = (relativeIndex: number): SpringConfig => {
     // 1. Past Lines & Active Line: Extremely fast snap (High stiffness)
     if (relativeIndex <= 0) {
-        return { mass: 1, stiffness: 1200, damping: 60, precision: 0.1 };
+        return { mass: 1, stiffness: 1200, damping: 78, precision: 0.1 };
     }
 
-    // 2. Future Lines: "Fast to slow, variation needs to be larger"
+    // 2. Future Lines: Fast cascade with visible stagger
     const dist = relativeIndex;
 
-    // If lines are very far down, give them a constant loose speed to prevent floatiness
+    // Far-off lines: still responsive
     if (dist > 8) {
-        return { mass: 1, stiffness: 40, damping: 20, precision: 0.1 };
+        return { mass: 1, stiffness: 90, damping: 22, precision: 0.1 };
     }
 
-    // Exponential Decay for Large Variation
-    // Reduced base stiffness and increased damping to prevent flickering
-    const base = 300;
-    const stiffness = Math.max(25, base * Math.pow(0.5, dist));
-    const damping = Math.sqrt(stiffness) * 1.15; // Over-damped to prevent oscillation
+    // Exponential decay for cascading feel, but with a high floor
+    const base = 500;
+    const stiffness = Math.max(100, base * Math.pow(0.65, dist));
+    const damping = Math.sqrt(stiffness) * 1.9; // Over-damped, no bounce
 
     return {
         mass: 1,
@@ -57,15 +56,15 @@ const getLinePosSpring = (relativeIndex: number): SpringConfig => {
 
 const SCALE_SPRING: SpringConfig = {
     mass: 1,
-    stiffness: 120,
-    damping: 25,
+    stiffness: 140,
+    damping: 30,
     precision: 0.001,
 };
 
 const USER_SCROLL_SPRING: SpringConfig = {
     mass: 0.9,
-    stiffness: 135,
-    damping: 34,
+    stiffness: 170,
+    damping: 40,
     precision: 0.01,
 };
 
@@ -311,7 +310,7 @@ export const useLyricsPhysics = ({
         // Disable elastic effect when overshooting to prevent "lyrics distortion"
         const isOvershooting = currentGlobalScrollY < minScroll || currentGlobalScrollY > maxScroll;
         const elasticFactor = (!isDirectManipulation && !isOvershooting)
-            ? Math.min(Math.max(scrollVelocity * 0.002, -0.5), 0.5)
+            ? Math.min(Math.max(scrollVelocity * 0.001, -0.3), 0.3)
             : 0;
 
         // Recalculate all positions based on current heights
@@ -363,12 +362,20 @@ export const useLyricsPhysics = ({
                 const isMovingDown = state.posY.target > state.posY.current + 1;
 
                 if (isUserInteracting) {
-                    posConfig = { mass: 0.5, stiffness: 400, damping: 35, precision: 0.1 };
+                    posConfig = { mass: 0.5, stiffness: 450, damping: 42, precision: 0.1 };
                 } else if (isMovingDown) {
-                    posConfig = { mass: 1, stiffness: 350, damping: 40, precision: 0.1 };
+                    posConfig = { mass: 1, stiffness: 400, damping: 48, precision: 0.1 };
                 } else {
                     const relativeIndex = index - activeIndex;
-                    posConfig = getLinePosSpring(relativeIndex);
+                    const springFromIndex = getLinePosSpring(relativeIndex);
+                    // For future lines moving UP (after seek), use the stiffer of
+                    // the index-based spring or a fast upward spring
+                    if (relativeIndex > 0 && Math.abs(displacement) > 20) {
+                        const upwardStiffness = Math.max(springFromIndex.stiffness, 300);
+                        posConfig = { mass: 1, stiffness: upwardStiffness, damping: Math.sqrt(upwardStiffness) * 1.9, precision: 0.1 };
+                    } else {
+                        posConfig = springFromIndex;
+                    }
                 }
 
                 updateSpring(state.posY, posConfig, dt);

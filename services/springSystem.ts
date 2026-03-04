@@ -70,8 +70,8 @@ export const SEEK_SPRING: SpringConfig = {
 // Camera Spring: Smooth global scrolling
 export const CAMERA_SPRING: SpringConfig = {
   mass: 1,
-  stiffness: 100, // Smooth but responsive
-  damping: 25,
+  stiffness: 150, // Tighter, faster response
+  damping: 34,    // Well over-damped (critical ≈ 24.5), minimal overshoot
   precision: 0.1,
 };
 
