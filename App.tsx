@@ -238,7 +238,7 @@ const App: React.FC = () => {
 
   const controlsSection = (
     <div className="flex flex-col items-center justify-center w-full h-full z-30 relative p-4">
-      <div className="relative flex flex-col items-center gap-8 w-full max-w-[360px]">
+      <div className="relative flex flex-col items-center gap-8 w-full max-w-[720px]">
         <Controls
           isPlaying={playState === PlayState.PLAYING}
           onPlayPause={togglePlay}

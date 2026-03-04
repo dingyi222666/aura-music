@@ -362,7 +362,7 @@ const Controls: React.FC<ControlsProps> = ({
             (coverScale, controlScale) => `scale(${coverScale * controlScale})`
           ),
         }}
-        className="relative aspect-square w-64 md:w-72 lg:w-[300px] rounded-3xl bg-gradient-to-br from-gray-800 to-gray-900 shadow-lg shadow-black/30 ring-1 ring-white/10 overflow-hidden mb-6"
+        className="relative aspect-square w-[clamp(16rem,30vw,28rem)] rounded-3xl bg-gradient-to-br from-gray-800 to-gray-900 shadow-lg shadow-black/30 ring-1 ring-white/10 overflow-hidden mb-6"
       >
         {coverUrl ? (
           <SmartImage

@@ -341,7 +341,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     if (!lyricLines.length) return;
 
     const paddingX = isMobile ? 24 : 56;
-    const focalPointOffset = height * 0.25;
+    const focalPointOffset = height * 0.35;
 
     // First pass: Determine hover and visibility
     // We can optimize this if needed, but for now iterating is fine.
@@ -458,7 +458,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     const rect = e.currentTarget.getBoundingClientRect();
     const clickY = e.clientY - rect.top;
     const height = rect.height;
-    const focalPointOffset = height * 0.25;
+    const focalPointOffset = height * 0.35;
 
     let matched = false;
     for (let i = 0; i < lyricLines.length; i++) {
