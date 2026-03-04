@@ -215,7 +215,7 @@ let renderHeight = 0;
 const FRAME_INTERVAL = 1000 / 60;
 
 // Heavy blur to melt the grid into smooth gradients
-const BLUR_OFFSETS = [1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0];
+const BLUR_OFFSETS = [1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0];
 
 // ---------------------------------------------------------------------------
 //  GL Helpers
