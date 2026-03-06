@@ -6,12 +6,18 @@ export interface LyricWord {
 
 export interface LyricLine {
   time: number; // Start time in seconds
+  endTime?: number; // End time in seconds (from TTML <p> end or last word)
   text: string; // Main text (e.g. Original Language)
   translation?: string; // Secondary text (e.g. Translation)
+  romanization?: string; // Optional romanized lyric line
   words?: LyricWord[]; // For enhanced LRC animation of the main text
   isPreciseTiming?: boolean; // If true, end times are exact (from YRC) and shouldn't be auto-extended
   isInterlude?: boolean; // If true, this is an instrumental interlude line ("...")
   isMetadata?: boolean; // If true, line represents metadata and shouldn't drive playback
+  isBackground?: boolean; // If true, this line is background vocal
+  isDuet?: boolean; // If true, this line belongs to a multi-performer song
+  agent?: string; // Performer ID from ttm:agent (e.g. "v1", "v2")
+  align?: "left" | "right"; // Alignment for duet lines
 }
 
 export interface Song {

@@ -1,8 +1,9 @@
 import { LyricLine as LyricLineType } from "../../types";
+import { SpringConfig, SpringSystem } from "../../services/springSystem";
 import { ILyricLine } from "./ILyricLine";
 
 const EMPHASIS_ENTRY_LEAD = 0.4;
-const EMPHASIS_MIN_DURATION = 1;
+const EMPHASIS_MIN_DURATION = 1.5;
 const EMPHASIS_MAX_CHARS = 7;
 const EMPHASIS_RISE = 0.05;
 const EMPHASIS_SWAY_X = 0.03;
@@ -11,6 +12,20 @@ const EMPHASIS_SCALE = 0.1;
 const EMPHASIS_GLOW = 0.3;
 const EMPHASIS_TRAIL = 1.2;
 const EMPHASIS_SPLIT = 0.5;
+const BG_LEAD = 0.9;
+const BG_TRAIL = 0.45;
+const BG_FONT_SCALE = 0.76;
+const BG_ACTIVE_ALPHA = 0.58;
+const BG_PAST_ALPHA = 0.5;
+const BG_FUTURE_ALPHA = 0.2;
+const BG_IDLE_ALPHA = 0.12;
+const BG_TRANS_ALPHA = 0.42;
+const BG_SPRING: SpringConfig = {
+  mass: 0.95,
+  stiffness: 150,
+  damping: 24,
+  precision: 0.001,
+};
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const smoothStep = (start: number, end: number, value: number) => {
@@ -82,6 +97,20 @@ export interface WordLayout {
 
 const WRAPPED_LINE_GAP_RATIO = 0.25;
 
+type TimedWord = Pick<
+  WordLayout,
+  "text" | "startTime" | "endTime" | "isVerbatim"
+>;
+
+interface WrapAtom extends TimedWord {}
+
+export interface WrappedWord extends WordLayout {
+  visibleWidth: number;
+  row: number;
+}
+
+export type RowMode = "future" | "past" | "active" | "mixed";
+
 export interface LineLayout {
   y: number;
   height: number;
@@ -93,16 +122,274 @@ export interface LineLayout {
   translationWidth?: number;
 }
 
+const HAN_REGEX = /\p{Script=Han}/u;
+const HIRAGANA_REGEX = /\p{Script=Hiragana}/u;
+const KATAKANA_REGEX = /\p{Script=Katakana}/u;
+const HANGUL_REGEX = /\p{Script=Hangul}/u;
+
 const detectLanguage = (text: string) => {
-  const cjkRegex = /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/;
-  return cjkRegex.test(text) ? "zh" : "en";
+  if (HIRAGANA_REGEX.test(text) || KATAKANA_REGEX.test(text)) return "ja";
+  if (HANGUL_REGEX.test(text)) return "ko";
+  if (HAN_REGEX.test(text)) return "zh";
+  return "en";
 };
 
-const getFonts = (isMobile: boolean) => {
-  const baseSize = isMobile ? 34 : 44;
-  const transSize = isMobile ? 19 : 24;
+const isCjk = (text: string) => {
+  return (
+    HAN_REGEX.test(text) ||
+    HIRAGANA_REGEX.test(text) ||
+    KATAKANA_REGEX.test(text) ||
+    HANGUL_REGEX.test(text)
+  );
+};
+
+const widthOf = (
+  text: string,
+  measure: (text: string) => number,
+  baseSize: number,
+) => {
+  const width = measure(text);
+  if (width > 0 || text.trim().length === 0) return width;
+  return Array.from(text).length * (baseSize * 0.5);
+};
+
+const visibleWidthOf = (
+  text: string,
+  measure: (text: string) => number,
+  baseSize: number,
+) => {
+  const visible = text.trimEnd();
+  if (!visible) return 0;
+  return widthOf(visible, measure, baseSize);
+};
+
+export const rowShiftOf = (
+  align: "left" | "right" | undefined,
+  rowWidth: number,
+  blockWidth: number,
+) => {
+  if (align !== "right" || blockWidth <= rowWidth) return 0;
+  return blockWidth - rowWidth;
+};
+
+export const shouldEmphasizeWord = (word: TimedWord) => {
+  if (!word.isVerbatim) return false;
+
+  const text = word.text.trim();
+  if (!text) return false;
+
+  const duration = word.endTime - word.startTime;
+  if (duration < EMPHASIS_MIN_DURATION) return false;
+
+  const charCount = Array.from(text).length;
+
+  if (isCjk(text) && charCount > 1) return false;
+
+  return charCount > 1 && charCount <= EMPHASIS_MAX_CHARS;
+};
+
+const isTrailingWord = (words: TimedWord[], index: number) => {
+  for (let i = words.length - 1; i >= 0; i--) {
+    if (words[i].text.trim()) {
+      return i === index;
+    }
+  }
+
+  return index === words.length - 1;
+};
+
+const getEmphasisProfile = (word: TimedWord, words: TimedWord[], index: number) => {
+  let span = Math.max(EMPHASIS_MIN_DURATION, word.endTime - word.startTime);
+  let zoom = span / 2;
+  zoom = zoom > 1 ? Math.sqrt(zoom) : zoom ** 3;
+  zoom *= 0.6;
+
+  let bloom = span / 3;
+  bloom = bloom > 1 ? Math.sqrt(bloom) : bloom ** 3;
+  bloom *= 0.5;
+
+  if (isTrailingWord(words, index)) {
+    zoom *= 1.6;
+    bloom *= 1.5;
+    span *= EMPHASIS_TRAIL;
+  }
+
+  const glyphs = Array.from(word.text.trim()).length;
+  const anchorCount =
+    isCjk(word.text) && glyphs > 1 ? 1 : Math.max(1, glyphs);
+
   return {
-    main: `900 ${baseSize}px "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif`,
+    span,
+    zoom: Math.min(1.2, zoom),
+    bloom: Math.min(0.8, bloom),
+    anchorCount,
+    stagger: span / 2.5 / anchorCount,
+  };
+};
+
+export const getWordAnimationDuration = (
+  word: TimedWord,
+  words: TimedWord[],
+  index: number,
+) => {
+  const duration = Math.max(
+    EMPHASIS_MIN_DURATION,
+    word.endTime - word.startTime,
+  );
+  if (!shouldEmphasizeWord(word)) return duration;
+
+  const profile = getEmphasisProfile(word, words, index);
+  const finalDelay = profile.stagger * Math.max(0, profile.anchorCount - 1);
+  const glowTail = Math.max(
+    profile.span,
+    profile.span * 1.4 - EMPHASIS_ENTRY_LEAD,
+  );
+  return glowTail + finalDelay;
+};
+
+export const wordStateOf = (
+  word: TimedWord,
+  words: TimedWord[],
+  index: number,
+  currentTime: number,
+): Exclude<RowMode, "mixed"> => {
+  const elapsed = currentTime - word.startTime;
+  const duration = getWordAnimationDuration(word, words, index);
+  const lead = shouldEmphasizeWord(word) ? EMPHASIS_ENTRY_LEAD : 0;
+
+  if (elapsed >= -lead && elapsed < duration) return "active";
+  if (currentTime >= word.endTime) return "past";
+  return "future";
+};
+
+export const rowModeOf = (words: TimedWord[], currentTime: number): RowMode => {
+  let hasPast = false;
+  let hasFuture = false;
+  let hasActive = false;
+
+  words.forEach((word, index) => {
+    const mode = wordStateOf(word, words, index, currentTime);
+    if (mode === "active") hasActive = true;
+    else if (mode === "past") hasPast = true;
+    else hasFuture = true;
+  });
+
+  if (hasActive) return "active";
+  if (hasPast && hasFuture) return "mixed";
+  if (hasPast) return "past";
+  return "future";
+};
+
+export const wrapWords = ({
+  atoms,
+  maxWidth,
+  paddingY,
+  lineHeight,
+  wrapLineGap,
+  align,
+  baseSize,
+  measure,
+}: {
+  atoms: WrapAtom[];
+  maxWidth: number;
+  paddingY: number;
+  lineHeight: number;
+  wrapLineGap: number;
+  align: "left" | "right" | undefined;
+  baseSize: number;
+  measure: (text: string) => number;
+}) => {
+  const words: WrappedWord[] = [];
+  const rows: Array<{ start: number; end: number; width: number }> = [];
+  let row = 0;
+  let lineX = 0;
+  let lineY = paddingY;
+  let rowStart = 0;
+  let rowWidth = 0;
+  let textWidth = 0;
+
+  const pushRow = (end: number) => {
+    if (end <= rowStart) return;
+    rows.push({
+      start: rowStart,
+      end,
+      width: rowWidth,
+    });
+    textWidth = Math.max(textWidth, rowWidth);
+    rowStart = end;
+    rowWidth = 0;
+  };
+
+  atoms.forEach((atom) => {
+    const width = widthOf(atom.text, measure, baseSize);
+    const visibleWidth = visibleWidthOf(atom.text, measure, baseSize);
+
+    if (lineX > 0 && lineX + visibleWidth > maxWidth) {
+      pushRow(words.length);
+      row += 1;
+      lineX = 0;
+      lineY += lineHeight + wrapLineGap;
+    }
+
+    const word: WrappedWord = {
+      text: atom.text,
+      x: lineX,
+      y: lineY,
+      width,
+      visibleWidth,
+      startTime: atom.startTime,
+      endTime: atom.endTime,
+      isVerbatim: atom.isVerbatim,
+      row,
+    };
+
+    words.push(word);
+    lineX += width;
+    rowWidth = Math.max(rowWidth, word.x + visibleWidth);
+  });
+
+  pushRow(words.length);
+
+  rows.forEach((item) => {
+    const shift = rowShiftOf(align, item.width, textWidth);
+    if (shift <= 0) return;
+    for (let i = item.start; i < item.end; i++) {
+      words[i].x += shift;
+    }
+  });
+
+  return {
+    words,
+    textWidth,
+    height: lineY + lineHeight,
+  };
+};
+
+export const pivotOf = (
+  align: "left" | "right" | undefined,
+  width: number,
+  paddingX: number,
+) => {
+  return align === "right" ? Math.max(paddingX, width - paddingX) : paddingX;
+};
+
+export const centerOf = (
+  align: "left" | "right" | undefined,
+  width: number,
+  textWidth: number,
+  paddingX: number,
+) => {
+  if (textWidth <= 0) return pivotOf(align, width, paddingX);
+
+  const start = align === "right" ? width - paddingX - textWidth : paddingX;
+  return start + textWidth * 0.5;
+};
+
+const getFonts = (isMobile: boolean, scale: number = 1) => {
+  const baseSize = (isMobile ? 34 : 44) * scale;
+  const transSize = (isMobile ? 19 : 24) * scale;
+  return {
+    main: `800 ${baseSize}px "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif`,
     trans: `600 ${transSize}px "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif`,
     mainHeight: baseSize,
     transHeight: transSize * 1.3,
@@ -124,6 +411,110 @@ export class LyricLine implements ILyricLine {
   private logicalHeight: number = 0;
   private liftCanvas: OffscreenCanvas | HTMLCanvasElement;
   private liftCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+  private visibility: number = 1;
+  private bgSpring?: SpringSystem;
+  private bgStamp = -1;
+  private bgTime = Number.NaN;
+  private bgShow = 0;
+
+  private getBackgroundBounds() {
+    const start = this.lyricLine.time;
+    let end = this.lyricLine.endTime;
+
+    if (!end || end <= start) {
+      if (this.lyricLine.words?.length) {
+        end = this.lyricLine.words[this.lyricLine.words.length - 1].endTime;
+      }
+    }
+
+    return {
+      start,
+      end: end && end > start ? end : undefined,
+    };
+  }
+
+  private hasBackgroundWindow(currentTime?: number) {
+    if (!this.lyricLine.isBackground || !Number.isFinite(currentTime)) {
+      return false;
+    }
+
+    const t = currentTime as number;
+    const bounds = this.getBackgroundBounds();
+    const end = bounds.end ?? bounds.start + 4;
+    return t >= bounds.start - BG_LEAD && t < end + BG_TRAIL;
+  }
+
+  private getBackgroundShow(currentTime?: number) {
+    if (!this.lyricLine.isBackground || !this.bgSpring) return 1;
+    if (!Number.isFinite(currentTime)) {
+      return clamp01(this.bgSpring.getCurrent("show"));
+    }
+
+    if (this.bgTime === currentTime) {
+      return this.bgShow;
+    }
+
+    const now = performance.now();
+    const dt =
+      this.bgStamp === -1
+        ? 0.016
+        : Math.min(0.1, Math.max(0.001, (now - this.bgStamp) / 1000));
+    this.bgStamp = now;
+
+    const show = this.hasBackgroundWindow(currentTime) ? 1 : 0;
+    const target = this.bgSpring.getTarget("show");
+    const current = this.bgSpring.getCurrent("show");
+
+    if (target === 0 && show === 1 && current < 0.01) {
+      this.bgSpring.setValue("show", 0);
+    }
+
+    this.bgSpring.setTarget("show", show, BG_SPRING);
+    this.bgSpring.update(dt);
+    this.bgTime = currentTime;
+    this.bgShow = clamp01(this.bgSpring.getCurrent("show"));
+    return this.bgShow;
+  }
+
+  private getBackgroundFade(
+    currentTime?: number,
+    show = this.getBackgroundShow(currentTime),
+  ) {
+    if (!this.lyricLine.isBackground) return 1;
+    if (!Number.isFinite(currentTime)) {
+      return show;
+    }
+
+    const t = currentTime as number;
+    const bounds = this.getBackgroundBounds();
+
+    if (!bounds.end) {
+      const delta = bounds.start - t;
+      return Math.max(0, 1 - Math.abs(delta) / 4) * show;
+    }
+
+    if (t < bounds.start - BG_LEAD) return 0;
+    if (t < bounds.start) {
+      return smoothStep(bounds.start - BG_LEAD, bounds.start, t) * show;
+    }
+    if (t <= bounds.end) return show;
+    if (t < bounds.end + BG_TRAIL) {
+      return (1 - smoothStep(bounds.end, bounds.end + BG_TRAIL, t)) * show;
+    }
+    return 0;
+  }
+
+  private isInTimeRange(currentTime: number): boolean {
+    const start = this.lyricLine.time;
+    let end = this.lyricLine.endTime;
+    if (!end || end <= start) {
+      if (this.lyricLine.words?.length) {
+        end = this.lyricLine.words[this.lyricLine.words.length - 1].endTime;
+      }
+    }
+    if (!end || end <= start) end = start + 4;
+    return currentTime >= start && currentTime < end;
+  }
 
   constructor(line: LyricLineType, index: number, isMobile: boolean) {
     this.lyricLine = line;
@@ -141,6 +532,10 @@ export class LyricLine implements ILyricLine {
     this.liftCtx = liftCtx as
       | OffscreenCanvasRenderingContext2D
       | CanvasRenderingContext2D;
+
+    if (line.isBackground) {
+      this.bgSpring = new SpringSystem({ show: 0 });
+    }
   }
 
   private drawFullLine({
@@ -171,12 +566,46 @@ export class LyricLine implements ILyricLine {
     this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
     this.ctx.save();
 
+    const isBackground = Boolean(this.lyricLine.isBackground);
+
+    if (isBackground) {
+      const show = this.getBackgroundShow(currentTime);
+      const fade = this.getBackgroundFade(currentTime, show);
+      const shown = show > 0.001;
+      this.visibility = shown ? show : 0;
+      if (!shown) {
+        this.ctx.restore();
+        return;
+      }
+      this.ctx.globalAlpha = fade;
+    } else {
+      this.visibility = 1;
+    }
+
+    // Background lines are "visually active" when currentTime is within their range
+    const active =
+      isActive || (isBackground && this.isInTimeRange(currentTime));
+
     this.ctx.font = mainFont;
     this.ctx.textBaseline = "top";
-    this.ctx.translate(paddingX, 0);
+
+    // Compute translation for alignment (left or right)
+    let translateX = paddingX;
+    if (this.lyricLine.align === "right" && this.layout.textWidth > 0) {
+      translateX = this.logicalWidth - paddingX - this.layout.textWidth;
+    }
+    this.ctx.translate(translateX, 0);
+
+    if (isBackground) {
+      const show = Math.max(0.001, this.getBackgroundShow(currentTime));
+      const rise = (1 - show) * mainHeight * 0.35;
+      this.ctx.translate(0, rise);
+      this.ctx.scale(1, show);
+    }
 
     if (hoverProgress > 0.001) {
-      this.ctx.fillStyle = `rgba(255, 255, 255, ${0.08 * hoverProgress})`;
+      const hoverAlpha = isBackground ? 0.05 : 0.08;
+      this.ctx.fillStyle = `rgba(255, 255, 255, ${hoverAlpha * hoverProgress})`;
       const bgWidth = Math.max(this.layout.textWidth + 32, 200);
       const bgScale = 0.98 + 0.02 * hoverProgress;
       const bgHeight = this.layout.height * bgScale;
@@ -185,18 +614,12 @@ export class LyricLine implements ILyricLine {
       this.ctx.fill();
     }
 
-    const wordCount = this.layout.words.length;
-    let fastWordCount = 0;
-    for (const w of this.layout.words) {
-      if (w.endTime - w.startTime < 0.2) fastWordCount++;
-    }
-
-    const isFastLine = wordCount > 0 && fastWordCount / wordCount > 0.9;
-
-    if (isActive && (!hasTimedWords || isFastLine)) {
-      this.ctx.fillStyle = "#FFFFFF";
+    if (active && !hasTimedWords) {
+      this.ctx.fillStyle = isBackground
+        ? `rgba(255, 255, 255, ${BG_ACTIVE_ALPHA})`
+        : "#FFFFFF";
       this.layout.words.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
-    } else if (isActive) {
+    } else if (active) {
       const FLOAT_UP = 0.05 * mainHeight;
       const lineGroups = new Map<number, WordLayout[]>();
 
@@ -207,50 +630,52 @@ export class LyricLine implements ILyricLine {
       });
 
       lineGroups.forEach((lineWords) => {
-        const needsAnimation = lineWords.some((w, index) => {
-          const elapsed = currentTime - w.startTime;
-          const animDuration = this.getWordAnimationDuration(
-            w,
-            lineWords,
-            index,
-          );
-          const lead = this.shouldEmphasizeWord(w) ? EMPHASIS_ENTRY_LEAD : 0;
-          return elapsed >= -lead && elapsed < animDuration;
-        });
+        const mode = rowModeOf(lineWords, currentTime);
 
-        const allPast = lineWords.every((w) => currentTime >= w.endTime);
-
-        if (needsAnimation) {
+        if (mode === "active" || mode === "mixed") {
           this.drawActiveWords(lineWords, currentTime);
-        } else if (allPast) {
-          this.ctx.fillStyle = "#FFFFFF";
+        } else if (mode === "past") {
+          this.ctx.fillStyle = isBackground
+            ? `rgba(255, 255, 255, ${BG_PAST_ALPHA})`
+            : "#FFFFFF";
           lineWords.forEach((w) =>
             this.ctx.fillText(w.text, w.x, w.y - FLOAT_UP),
           );
         } else {
-          this.ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+          this.ctx.fillStyle = isBackground
+            ? `rgba(255, 255, 255, ${BG_FUTURE_ALPHA})`
+            : "rgba(255, 255, 255, 0.5)";
           lineWords.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
         }
       });
     } else {
-      this.ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+      const baseOpacity = isBackground ? BG_IDLE_ALPHA : 0.3;
+      this.ctx.fillStyle = `rgba(255, 255, 255, ${baseOpacity})`;
       this.layout.words.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
     }
 
-    if (
-      this.layout.translationLines &&
-      this.layout.translationLines.length > 0
-    ) {
+    const lastWordY =
+      this.layout.words.length > 0
+        ? this.layout.words[this.layout.words.length - 1].y
+        : 0;
+
+    const hasSecondary =
+      this.layout.translationLines && this.layout.translationLines.length > 0;
+
+    if (hasSecondary) {
       this.ctx.font = transFont;
-      this.ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-      const lastWordY =
-        this.layout.words.length > 0
-          ? this.layout.words[this.layout.words.length - 1].y
-          : 0;
-      let transY = lastWordY + mainHeight * 1.2;
-      this.layout.translationLines.forEach((lineText) => {
-        this.ctx.fillText(lineText, 0, transY);
-        transY += transHeight;
+      this.ctx.fillStyle = isBackground
+        ? `rgba(255, 255, 255, ${BG_TRANS_ALPHA})`
+        : "rgba(255, 255, 255, 0.5)";
+      const baseY = lastWordY + mainHeight * 1.2;
+      let y = baseY;
+      this.layout.translationLines!.forEach((lineText) => {
+        const x =
+          this.lyricLine.align === "right"
+            ? Math.max(0, this.layout!.textWidth - this.ctx.measureText(lineText).width)
+            : 0;
+        this.ctx.fillText(lineText, x, y);
+        y += transHeight;
       });
     }
 
@@ -290,7 +715,8 @@ export class LyricLine implements ILyricLine {
   }
 
   private drawLiftedLine(words: WordLayout[], currentTime: number) {
-    const { main, mainHeight } = getFonts(this.isMobile);
+    const scale = this.lyricLine.isBackground ? BG_FONT_SCALE : 1;
+    const { main, mainHeight } = getFonts(this.isMobile, scale);
     const FLOAT_UP = 0.05 * mainHeight;
     const PAD = 6;
 
@@ -321,9 +747,13 @@ export class LyricLine implements ILyricLine {
       this.liftCtx.textBaseline = "top";
 
       if (elapsed >= duration) {
-        this.liftCtx.fillStyle = "#FFFFFF";
+        this.liftCtx.fillStyle = this.lyricLine.isBackground
+          ? `rgba(255, 255, 255, ${BG_PAST_ALPHA})`
+          : "#FFFFFF";
       } else if (elapsed < 0) {
-        this.liftCtx.fillStyle = "rgba(255, 255, 255, 0.5)";
+        this.liftCtx.fillStyle = this.lyricLine.isBackground
+          ? `rgba(255, 255, 255, ${BG_FUTURE_ALPHA})`
+          : "rgba(255, 255, 255, 0.5)";
       } else {
         const grad = this.liftCtx.createLinearGradient(
           PAD,
@@ -332,8 +762,19 @@ export class LyricLine implements ILyricLine {
           0,
         );
         const p = elapsed / safeDuration;
-        grad.addColorStop(Math.max(0, p), "#FFFFFF");
-        grad.addColorStop(Math.min(1, p + 0.15), "rgba(255, 255, 255, 0.5)");
+        if (this.lyricLine.isBackground) {
+          grad.addColorStop(
+            Math.max(0, p),
+            `rgba(255, 255, 255, ${BG_ACTIVE_ALPHA})`,
+          );
+          grad.addColorStop(
+            Math.min(1, p + 0.15),
+            `rgba(255, 255, 255, ${BG_FUTURE_ALPHA})`,
+          );
+        } else {
+          grad.addColorStop(Math.max(0, p), "#FFFFFF");
+          grad.addColorStop(Math.min(1, p + 0.15), "rgba(255, 255, 255, 0.5)");
+        }
         this.liftCtx.fillStyle = grad;
       }
 
@@ -362,26 +803,11 @@ export class LyricLine implements ILyricLine {
   }
 
   private shouldEmphasizeWord(word: WordLayout) {
-    if (!word.isVerbatim) return false;
-
-    const text = word.text.trim();
-    if (!text) return false;
-
-    const duration = word.endTime - word.startTime;
-    if (duration < EMPHASIS_MIN_DURATION) return false;
-
-    const charCount = Array.from(text).length;
-    return charCount > 1 && charCount <= EMPHASIS_MAX_CHARS;
+    return shouldEmphasizeWord(word);
   }
 
   private isTrailingWord(words: WordLayout[], index: number) {
-    for (let i = words.length - 1; i >= 0; i--) {
-      if (words[i].text.trim()) {
-        return i === index;
-      }
-    }
-
-    return index === words.length - 1;
+    return isTrailingWord(words, index);
   }
 
   private getWordAnimationDuration(
@@ -389,19 +815,7 @@ export class LyricLine implements ILyricLine {
     words: WordLayout[],
     index: number,
   ) {
-    const duration = Math.max(
-      EMPHASIS_MIN_DURATION,
-      word.endTime - word.startTime,
-    );
-    if (!this.shouldEmphasizeWord(word)) return duration;
-
-    const profile = this.getEmphasisProfile(word, words, index);
-    const finalDelay = profile.stagger * Math.max(0, profile.anchorCount - 1);
-    const glowTail = Math.max(
-      profile.span,
-      profile.span * 1.4 - EMPHASIS_ENTRY_LEAD,
-    );
-    return glowTail + finalDelay;
+    return getWordAnimationDuration(word, words, index);
   }
 
   private getEmphasisProfile(
@@ -409,30 +823,7 @@ export class LyricLine implements ILyricLine {
     words: WordLayout[],
     index: number,
   ) {
-    let span = Math.max(EMPHASIS_MIN_DURATION, word.endTime - word.startTime);
-    let zoom = span / 2;
-    zoom = zoom > 1 ? Math.sqrt(zoom) : zoom ** 3;
-    zoom *= 0.6;
-
-    let bloom = span / 3;
-    bloom = bloom > 1 ? Math.sqrt(bloom) : bloom ** 3;
-    bloom *= 0.5;
-
-    if (this.isTrailingWord(words, index)) {
-      zoom *= 1.6;
-      bloom *= 1.5;
-      span *= EMPHASIS_TRAIL;
-    }
-
-    const anchorCount = Math.max(1, Array.from(word.text.trim()).length);
-
-    return {
-      span,
-      zoom: Math.min(1.2, zoom),
-      bloom: Math.min(0.8, bloom),
-      anchorCount,
-      stagger: span / 2.5 / anchorCount,
-    };
+    return getEmphasisProfile(word, words, index);
   }
 
   private getSweepMix(positionX: number, wordWidth: number, progress: number) {
@@ -533,7 +924,8 @@ export class LyricLine implements ILyricLine {
     index: number,
     currentTime: number,
   ) {
-    const { main, mainHeight } = getFonts(this.isMobile);
+    const scale = this.lyricLine.isBackground ? BG_FONT_SCALE : 1;
+    const { main, mainHeight } = getFonts(this.isMobile, scale);
     const elapsed = currentTime - word.startTime;
     const duration = Math.max(
       EMPHASIS_MIN_DURATION,
@@ -619,12 +1011,18 @@ export class LyricLine implements ILyricLine {
   }
 
   public measure(containerWidth: number, suggestedTranslationWidth?: number) {
-    const { main, trans, mainHeight, transHeight } = getFonts(this.isMobile);
+    const fontScale = this.lyricLine.isBackground ? BG_FONT_SCALE : 1;
+    const { main, trans, mainHeight, transHeight } = getFonts(
+      this.isMobile,
+      fontScale,
+    );
 
-    const baseSize = this.isMobile ? 32 : 40;
+    const baseSize = (this.isMobile ? 32 : 40) * fontScale;
     const paddingY = 18;
     const paddingX = this.isMobile ? 24 : 56;
-    const maxWidth = containerWidth - paddingX * 2;
+    // Duet lines get reduced max width (~65% of container)
+    const duetRatio = this.lyricLine.isDuet ? (this.isMobile ? 0.88 : 0.78) : 1;
+    const maxWidth = (containerWidth - paddingX * 2) * duetRatio;
 
     // Reset context font for measurement
     this.ctx.font = main;
@@ -656,25 +1054,28 @@ export class LyricLine implements ILyricLine {
     });
 
     let blockHeight = lineHeight;
-    let translationLines: string[] | undefined = undefined;
+    let translationLines: string[] | undefined;
     let effectiveTextWidth = textWidth;
     let translationWidth = 0;
 
-    if (this.lyricLine.translation) {
-      // Use suggested width if provided and larger than current text width, but not exceeding maxWidth
-      // Otherwise use textWidth (if > 0) or maxWidth
-      let translationWrapWidth = textWidth > 0 ? textWidth : maxWidth;
+    // Secondary text: prefer translation, fall back to romanization
+    const secondaryText =
+      this.lyricLine.translation ?? this.lyricLine.romanization;
 
-      if (
-        suggestedTranslationWidth &&
-        suggestedTranslationWidth > translationWrapWidth
-      ) {
-        translationWrapWidth = Math.min(suggestedTranslationWidth, maxWidth);
-      }
+    // Use suggested width if provided and larger than current text width, but not exceeding maxWidth
+    // Otherwise use textWidth (if > 0) or maxWidth
+    let baseWrapWidth = textWidth > 0 ? textWidth : maxWidth;
+    if (
+      suggestedTranslationWidth &&
+      suggestedTranslationWidth > baseWrapWidth
+    ) {
+      baseWrapWidth = Math.min(suggestedTranslationWidth, maxWidth);
+    }
 
+    if (secondaryText) {
       const translationResult = this.measureTranslationLines({
-        translation: this.lyricLine.translation,
-        maxWidth: translationWrapWidth,
+        translation: secondaryText,
+        maxWidth: baseWrapWidth,
         transHeight,
         transFont: trans,
       });
@@ -729,18 +1130,29 @@ export class LyricLine implements ILyricLine {
   ) {
     if (!this.layout) return;
 
+    const isBackground = Boolean(this.lyricLine.isBackground);
+    const bgShow = isBackground ? this.getBackgroundShow(currentTime) : 0;
+    const bgActive = isBackground && this.isInTimeRange(currentTime);
+    const bgVisible =
+      isBackground && this.getBackgroundFade(currentTime, bgShow) > 0.001;
+
     // When hoverProgress is animating (not 0 or 1), we must redraw
     const hoverAnimating = hoverProgress > 0.001 && hoverProgress < 0.999;
 
     const stateUnchanged =
       !isActive &&
+      !bgVisible &&
       !this.isDirty &&
       !this.lastIsActive &&
       this.lastIsHovered === isHovered &&
       !hoverAnimating;
     if (stateUnchanged) return;
 
-    const { main, trans, mainHeight, transHeight } = getFonts(this.isMobile);
+    const fontScale = this.lyricLine.isBackground ? BG_FONT_SCALE : 1;
+    const { main, trans, mainHeight, transHeight } = getFonts(
+      this.isMobile,
+      fontScale,
+    );
 
     const paddingX = this.isMobile ? 24 : 56;
     const hasTimedWords = this.layout.words.some((w) => w.isVerbatim);
@@ -748,8 +1160,10 @@ export class LyricLine implements ILyricLine {
     const stateChanged =
       this.lastIsActive !== isActive || this.lastIsHovered !== isHovered;
 
+    const shouldAnimate = isActive || bgVisible;
+
     if (
-      isActive &&
+      shouldAnimate &&
       !hasTimedWords &&
       !this.isDirty &&
       !stateChanged &&
@@ -784,8 +1198,18 @@ export class LyricLine implements ILyricLine {
     return this._height;
   }
 
-  public getCurrentHeight() {
+  public getCurrentHeight(currentTime?: number) {
+    if (this.lyricLine.isBackground) {
+      return this._height * this.getBackgroundShow(currentTime);
+    }
     return this._height;
+  }
+
+  public getTargetHeight(currentTime?: number) {
+    if (!this.lyricLine.isBackground) {
+      return this._height;
+    }
+    return this.hasBackgroundWindow(currentTime) ? this._height : 0;
   }
 
   public getLogicalWidth() {
@@ -796,8 +1220,31 @@ export class LyricLine implements ILyricLine {
     return this.logicalHeight;
   }
 
+  public getScalePivot() {
+    const paddingX = this.isMobile ? 24 : 56;
+    return pivotOf(this.lyricLine.align, this.logicalWidth, paddingX);
+  }
+
+  public getPressPivot() {
+    const paddingX = this.isMobile ? 24 : 56;
+    return centerOf(
+      this.lyricLine.align,
+      this.logicalWidth,
+      this.layout?.textWidth || 0,
+      paddingX,
+    );
+  }
+
   public isInterlude() {
     return false;
+  }
+
+  public getAlignment(): "left" | "right" | undefined {
+    return this.lyricLine.align;
+  }
+
+  public isBackgroundLine() {
+    return Boolean(this.lyricLine.isBackground);
   }
 
   // --- Helpers ---
@@ -815,10 +1262,7 @@ export class LyricLine implements ILyricLine {
   }: any) {
     this.ctx.font = mainFont;
 
-    const words: WordLayout[] = [];
-    let currentLineX = 0;
-    let currentLineY = paddingY;
-    let maxLineWidth = 0;
+    const atoms: WrapAtom[] = [];
 
     const addWord = (
       text: string,
@@ -826,36 +1270,12 @@ export class LyricLine implements ILyricLine {
       end: number,
       isVerbatim: boolean,
     ) => {
-      const metrics = this.ctx.measureText(text);
-      let width = metrics.width;
-      if (width === 0 && text.trim().length > 0) {
-        width = text.length * (baseSize * 0.5);
-      }
-
-      if (currentLineX + width > maxWidth && currentLineX > 0) {
-        currentLineX = 0;
-        currentLineY += mainHeight + wrapLineGap;
-      }
-
-      const { charWidths, charOffsets } = this.computeCharMetrics(
+      atoms.push({
         text,
-        baseSize,
-      );
-
-      words.push({
-        text,
-        x: currentLineX,
-        y: currentLineY,
-        width,
         startTime: start,
         endTime: end,
         isVerbatim,
-        charWidths,
-        charOffsets,
       });
-
-      currentLineX += width;
-      maxLineWidth = Math.max(maxLineWidth, currentLineX);
     };
 
     if (line.words && line.words.length > 0) {
@@ -867,7 +1287,7 @@ export class LyricLine implements ILyricLine {
       for (const seg of segments) {
         addWord(seg.segment, line.time, 999999, false);
       }
-    } else if (lang === "zh") {
+    } else if (lang !== "en") {
       line.text.split("").forEach((c: string) => {
         addWord(c, line.time, 999999, false);
       });
@@ -881,10 +1301,40 @@ export class LyricLine implements ILyricLine {
       });
     }
 
+    const layout = wrapWords({
+      atoms,
+      maxWidth,
+      paddingY,
+      lineHeight: mainHeight,
+      wrapLineGap,
+      align: line.align,
+      baseSize,
+      measure: (text: string) => this.ctx.measureText(text).width,
+    });
+
+    const words = layout.words.map((word) => {
+      const { charWidths, charOffsets } = this.computeCharMetrics(
+        word.text,
+        baseSize,
+      );
+
+      return {
+        text: word.text,
+        x: word.x,
+        y: word.y,
+        width: word.width,
+        startTime: word.startTime,
+        endTime: word.endTime,
+        isVerbatim: word.isVerbatim,
+        charWidths,
+        charOffsets,
+      };
+    });
+
     return {
       words,
-      textWidth: maxLineWidth,
-      height: currentLineY + mainHeight,
+      textWidth: layout.textWidth,
+      height: layout.height,
     };
   }
 

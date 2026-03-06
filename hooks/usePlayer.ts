@@ -12,6 +12,7 @@ import { parseLyrics } from "../services/lyrics";
 import {
   fetchLyricsById,
   searchAndMatchLyrics,
+  MatchedLyricsResult,
 } from "../services/lyricsService";
 import { audioResourceCache } from "../services/cache";
 
@@ -281,16 +282,22 @@ export const usePlayer = ({
   );
 
   const mergeLyricsWithMetadata = useCallback(
-    (result: { lrc: string; yrc?: string; tLrc?: string; metadata: string[] }) => {
-      const parsed = parseLyrics(result.lrc, result.tLrc, {
-        yrcContent: result.yrc,
-      });
+    (result: MatchedLyricsResult) => {
+      const hasTtml = Boolean(result.ttml && result.ttml.trim());
+
+      const parsed = hasTtml
+        ? parseLyrics(result.ttml!)
+        : parseLyrics(result.lrc ?? "", result.tLrc, {
+            yrcContent: result.yrc,
+          });
+
       const metadataCount = result.metadata.length;
       const metadataLines = result.metadata.map((text, idx) => ({
         time: -0.1 * (metadataCount - idx),
         text,
         isMetadata: true,
       }));
+
       return [...metadataLines, ...parsed].sort((a, b) => a.time - b.time);
     },
     [],

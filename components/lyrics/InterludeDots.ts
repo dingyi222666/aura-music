@@ -2,6 +2,22 @@ import { LyricLine as LyricLineType } from "../../types";
 import { ILyricLine } from "./ILyricLine";
 import { SpringSystem, INTERLUDE_SPRING } from "../../services/springSystem";
 
+const DOT_SHIFT = 6;
+
+export const dotWidthOf = (spacing: number, radius: number) => spacing * 2 + radius * 2;
+
+export const startOf = (
+    align: "left" | "right",
+    width: number,
+    paddingX: number,
+    contentWidth: number,
+) => {
+    if (align === "right") {
+        return width - paddingX - DOT_SHIFT - contentWidth;
+    }
+    return paddingX + DOT_SHIFT;
+};
+
 export class InterludeDots implements ILyricLine {
     private canvas: OffscreenCanvas | HTMLCanvasElement;
     private ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
@@ -16,12 +32,24 @@ export class InterludeDots implements ILyricLine {
     private lastDrawTime: number = -1;
     private textWidth: number = 0;
     private duration: number = 0;
+    private cacheTime = Number.NaN;
+    private cacheExpansion = 0;
+    private align: "left" | "right";
 
-    constructor(line: LyricLineType, index: number, isMobile: boolean, duration: number = 0) {
+    constructor(
+        line: LyricLineType,
+        index: number,
+        isMobile: boolean,
+        duration: number = 0,
+        align: "left" | "right" = "left",
+    ) {
         this.lyricLine = line;
         this.index = index;
         this.isMobile = isMobile;
-        this.duration = duration;
+        this.duration = line.endTime && line.endTime > line.time
+            ? line.endTime - line.time
+            : duration;
+        this.align = align;
         this.pixelRatio =
             typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
@@ -38,9 +66,58 @@ export class InterludeDots implements ILyricLine {
         });
     }
 
+    private getEndTime() {
+        if (this.duration > 0) {
+            return this.lyricLine.time + this.duration;
+        }
+        return this.lyricLine.time + 4;
+    }
+
+    private isActiveTime(currentTime?: number) {
+        if (!Number.isFinite(currentTime)) return false;
+        const t = currentTime as number;
+        return t >= this.lyricLine.time && t < this.getEndTime();
+    }
+
+    private getExpansion(currentTime?: number) {
+        if (!Number.isFinite(currentTime)) {
+            return Math.max(0, this.springSystem.getCurrent("expansion"));
+        }
+
+        if (this.cacheTime === currentTime) {
+            return this.cacheExpansion;
+        }
+
+        const now = performance.now();
+        let dt = this.lastDrawTime === -1 ? 0.016 : (now - this.lastDrawTime) / 1000;
+        dt = Math.min(dt, 0.1);
+        this.lastDrawTime = now;
+
+        const currentTarget = this.springSystem.getTarget("expansion") || 0;
+        const currentExpansion = this.springSystem.getCurrent("expansion");
+        const targetExpansion = this.isActiveTime(currentTime) ? 1 : 0;
+
+        if (currentTarget === 1 && targetExpansion === 0) {
+            this.springSystem.setVelocity("expansion", 8);
+        }
+
+        if (currentTarget === 0 && targetExpansion === 1 && currentExpansion < 0.01) {
+            this.springSystem.setValue("expansion", 0);
+        }
+
+        this.springSystem.setTarget("expansion", targetExpansion, INTERLUDE_SPRING);
+        this.springSystem.update(dt);
+
+        this.cacheTime = currentTime as number;
+        this.cacheExpansion = Math.max(0, this.springSystem.getCurrent("expansion"));
+        return this.cacheExpansion;
+    }
+
     public measure(containerWidth: number, suggestedTranslationWidth?: number) {
         const baseSize = this.isMobile ? 32 : 40;
         const paddingY = 18;
+        const baseRadius = this.isMobile ? 5 : 7;
+        const dotSpacing = this.isMobile ? 16 : 24;
 
         // Fixed height for interlude dots
         this._height = baseSize + paddingY * 2;
@@ -58,58 +135,34 @@ export class InterludeDots implements ILyricLine {
         }
 
         // Calculate approximate width for hover background
-        const dotSpacing = this.isMobile ? 16 : 24;
-        this.textWidth = dotSpacing * 2 + 40; // Approximate width
+        this.textWidth = dotWidthOf(dotSpacing, baseRadius);
     }
 
     public draw(currentTime: number, isActive: boolean, isHovered: boolean, hoverProgress: number = isHovered ? 1 : 0) {
         const now = performance.now();
-        
-        // Calculate dt with clamping to prevent physics explosions on re-entry
-        let dt = this.lastDrawTime === -1 ? 0.016 : (now - this.lastDrawTime) / 1000;
-        // Clamp dt to prevent spring explosion when line re-enters viewport after being off-screen
-        dt = Math.min(dt, 0.1);
-        this.lastDrawTime = now;
-
-        // Determine target expansion state
-        const currentTarget = this.springSystem.getTarget("expansion") || 0;
-        const currentExpansion = this.springSystem.getCurrent("expansion");
-        const targetExpansion = isActive ? 1 : 0;
-
-        // Detect transition from Active -> Inactive (Exit animation start)
-        // "Finally scale up once, then completely scale down"
-        if (currentTarget === 1 && targetExpansion === 0) {
-            // Apply a positive velocity to create a "pop" effect before shrinking
-            // The spring will pull it to 0, but velocity will push it up first.
-            this.springSystem.setVelocity("expansion", 8); 
-        }
-
-        // If we just became active from a cold state (e.g. seek), reset spring to 0
-        // so it animates cleanly from collapsed to expanded without physics explosion
-        if (currentTarget === 0 && targetExpansion === 1 && currentExpansion < 0.01) {
-            this.springSystem.setValue("expansion", 0);
-        }
-
-        this.springSystem.setTarget("expansion", targetExpansion, INTERLUDE_SPRING);
-        this.springSystem.update(dt);
-
-        // Clamp expansion to [0, 1.5] to allow for pop effect, but preventing negative
-        // We allow > 1 for the pop effect
-        const expansion = Math.max(0, this.springSystem.getCurrent("expansion"));
+        const active = isActive || this.isActiveTime(currentTime);
+        const expansion = this.getExpansion(currentTime);
 
         // Clear canvas
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
 
         // If completely collapsed and not active, don't draw anything
         // Increased threshold to ensure it disappears cleanly
-        if (expansion < 0.01 && !isActive) {
+        if (expansion < 0.01 && !active) {
             return;
         }
 
         const paddingX = this.isMobile ? 24 : 56;
         const baseRadius = this.isMobile ? 5 : 7;
         const dotSpacing = this.isMobile ? 16 : 24;
-        const totalDotsWidth = dotSpacing * 2;
+        const contentWidth = dotWidthOf(dotSpacing, baseRadius);
+        const startX = startOf(
+            this.align,
+            this.logicalWidth,
+            paddingX,
+            contentWidth,
+        );
+        const totalDotsWidth = contentWidth;
 
         // Calculate Progress
         // If active, we calculate progress based on line time and duration.
@@ -118,7 +171,7 @@ export class InterludeDots implements ILyricLine {
         if (this.duration > 0) {
             const elapsed = currentTime - this.lyricLine.time;
             progress = Math.max(0, Math.min(1, elapsed / this.duration));
-        } else if (isActive) {
+        } else if (active) {
              // If no duration, maybe pulse active?
              progress = 0.5; 
         } else {
@@ -135,20 +188,16 @@ export class InterludeDots implements ILyricLine {
             const bgWidth = Math.max(totalDotsWidth + 80, 200);
             const bgHeight = this._height * Math.min(1, expansion);
             const bgY = (this._height - bgHeight) / 2;
+            const bgX = this.align === "right"
+                ? startX + totalDotsWidth - bgWidth + 16
+                : startX - 16;
 
-            this.roundRect(paddingX - 16, bgY, bgWidth, bgHeight, 16 * Math.min(1, expansion));
+            this.roundRect(bgX, bgY, bgWidth, bgHeight, 16 * Math.min(1, expansion));
             this.ctx.fill();
         }
 
-        // Position dots - Left aligned with text but slightly offset
-        // "Still a bit to the right" -> Add small offset
-        const offsetX = 6; 
-        
         // Calculate center of the dot group for scaling pivot
-        // Dot 0 is at 0, Dot 1 at spacing, Dot 2 at 2*spacing (relative to start)
-        // Center is at Dot 1 (spacing)
-        // We want to translate to the center of the middle dot
-        const groupCenterX = paddingX + offsetX + baseRadius + dotSpacing;
+        const groupCenterX = startX + baseRadius + dotSpacing;
         const groupCenterY = this._height / 2;
 
         // Center vertically and horizontally at group center
@@ -214,12 +263,13 @@ export class InterludeDots implements ILyricLine {
         return this._height;
     }
 
-    public getCurrentHeight() {
-        // Return dynamic height based on expansion state
-        // Clamp to [0, 1] to prevent layout jitter during "pop" (expansion > 1)
-        // When expansion is 0, height is 0 (hidden)
-        const expansion = Math.max(0, Math.min(1, this.springSystem.getCurrent("expansion")));
+    public getCurrentHeight(_currentTime?: number) {
+        const expansion = Math.max(0, Math.min(1, this.getExpansion(_currentTime)));
         return this._height * expansion;
+    }
+
+    public getTargetHeight(currentTime?: number) {
+        return this.isActiveTime(currentTime) ? this._height : 0;
     }
 
     public isInterlude() {
@@ -240,5 +290,33 @@ export class InterludeDots implements ILyricLine {
 
     public getTextWidth() {
         return this.textWidth;
+    }
+
+    public getScalePivot() {
+        const paddingX = this.isMobile ? 24 : 56;
+        const baseRadius = this.isMobile ? 5 : 7;
+        const dotSpacing = this.isMobile ? 16 : 24;
+        const width = dotWidthOf(dotSpacing, baseRadius);
+        const startX = startOf(this.align, this.logicalWidth, paddingX, width);
+
+        return this.align === "right"
+            ? startX + width
+            : startX;
+    }
+
+    public getPressPivot() {
+        const paddingX = this.isMobile ? 24 : 56;
+        const baseRadius = this.isMobile ? 5 : 7;
+        const dotSpacing = this.isMobile ? 16 : 24;
+        const width = dotWidthOf(dotSpacing, baseRadius);
+        return startOf(this.align, this.logicalWidth, paddingX, width) + width * 0.5;
+    }
+
+    public getAlignment(): "left" | "right" | undefined {
+        return this.align;
+    }
+
+    public isBackgroundLine() {
+        return false;
     }
 }

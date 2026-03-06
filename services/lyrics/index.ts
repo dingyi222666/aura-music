@@ -17,13 +17,15 @@ import { LyricLine } from "./types";
 import { parseLrc } from "./lrc";
 import { parseNeteaseLyrics, isNeteaseFormat } from "./netease";
 import { mergeTranslations } from "./translation";
+import { parseTtml, isTtmlFormat } from "./ttml";
 
 // Re-export types
 export type { LyricLine, LyricWord } from "./types";
 
-// Re-export parsers  
+// Re-export parsers
 export { parseLrc } from "./lrc";
 export { parseNeteaseLyrics, isNeteaseFormat } from "./netease";
+export { parseTtml, isTtmlFormat } from "./ttml";
 export { mergeTranslations, buildTranslationMap } from "./translation";
 
 // Re-export utilities for backward compatibility
@@ -60,7 +62,9 @@ export const parseLyrics = (
   // Detect format and parse
   let lines: LyricLine[];
 
-  if (options?.yrcContent) {
+  if (isTtmlFormat(content)) {
+    lines = parseTtml(content);
+  } else if (options?.yrcContent) {
     // Use LRC as base, enrich with YRC word timing
     lines = parseNeteaseLyrics(options.yrcContent, content);
   } else if (isNeteaseFormat(content)) {

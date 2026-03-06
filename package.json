@@ -12,6 +12,7 @@
   "dependencies": {
     "@google/genai": "^1.30.0",
     "@react-spring/web": "^10.0.3",
+    "fast-xml-parser": "^4.5.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

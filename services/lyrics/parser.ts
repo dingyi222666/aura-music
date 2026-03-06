@@ -65,6 +65,7 @@ export const createLine = (
     time: number,
     text: string,
     options?: {
+        endTime?: number;
         words?: LyricWord[];
         translation?: string;
         isPreciseTiming?: boolean;
@@ -73,6 +74,7 @@ export const createLine = (
 ): LyricLine => ({
     time,
     text,
+    ...(options?.endTime && options.endTime > time && { endTime: options.endTime }),
     ...(options?.words?.length && { words: options.words }),
     ...(options?.translation && { translation: options.translation }),
     ...(options?.isPreciseTiming && { isPreciseTiming: true }),
@@ -148,6 +150,7 @@ export const mergePunctuation = (words: LyricWord[]): LyricWord[] => {
 export const filterShortInterludes = (lines: LyricLine[]): LyricLine[] => {
     return lines.filter((line, i) => {
         if (!isInterlude(line)) return true;
+        if (line.endTime && line.endTime > line.time) return true;
 
         // Find next content line
         let nextContentTime: number | undefined;
@@ -158,21 +161,27 @@ export const filterShortInterludes = (lines: LyricLine[]): LyricLine[] => {
             }
         }
 
-        // If no next content line, keep the interlude (end of song)
-        if (nextContentTime === undefined) return true;
+        const duration = nextContentTime === undefined ? Infinity : nextContentTime - line.time;
 
-        const duration = nextContentTime - line.time;
+        // If no next content line, keep the interlude (end of song)
+        if (!Number.isFinite(duration)) return true;
+
         return duration >= MIN_SOURCE_INTERLUDE_DURATION;
     });
 };
 
 /**
- * Calculate line end time based on words or estimate.
+ * Calculate line end time based on explicit endTime, words, or estimate.
  */
 export const calculateEndTime = (
     line: LyricLine,
     nextTime: number = Infinity
 ): number => {
+    // Explicit end time from source data (e.g. TTML <p> end) is authoritative
+    if (line.endTime && line.endTime > line.time) {
+        return line.endTime;
+    }
+
     if (line.words?.length) {
         const lastWord = line.words[line.words.length - 1];
         if (lastWord.endTime > line.time) {
@@ -196,9 +205,11 @@ export const addDurations = (lines: LyricLine[]): LyricLine[] => {
         let endTime = calculateEndTime(line, nextTime);
 
         if (isInterlude(line)) {
-            if (nextContentLine && nextContentLine.time > line.time) {
+            const explicit = Boolean(line.endTime && line.endTime > line.time);
+
+            if (!explicit && nextContentLine && nextContentLine.time > line.time) {
                 endTime = nextContentLine.time;
-            } else if (!nextContentLine) {
+            } else if (!explicit && !nextContentLine) {
                 endTime = Math.max(endTime, line.time + MIN_INTERLUDE_DURATION);
             }
         }
@@ -224,14 +235,18 @@ export function isInterlude(line?: LyricLine): boolean {
  */
 export function hasContent(line: LyricLine): boolean {
     if (isInterlude(line)) return false;
+    if (line.isBackground) return false;
     return Boolean(line.text?.trim());
 }
 
 /**
  * Insert interlude at specified time.
  */
-export const createInterlude = (time: number): LyricLine => {
-    return createLine(Math.max(time, 0), INTERLUDE_TEXT, { isInterlude: true });
+export const createInterlude = (time: number, endTime?: number): LyricLine => {
+    return createLine(Math.max(time, 0), INTERLUDE_TEXT, {
+        ...(endTime && endTime > time ? { endTime } : {}),
+        isInterlude: true,
+    });
 };
 
 /**
@@ -254,7 +269,7 @@ export const insertInterludes = (lines: LyricLine[]): LyricLine[] => {
     );
 
     if (firstLyric && firstLyric.time > PRELUDE_THRESHOLD && !hasPrelude) {
-        result.push(createInterlude(0));
+        result.push(createInterlude(0, firstLyric.time));
     }
 
     // Process each line and check for gaps
@@ -285,7 +300,7 @@ export const insertInterludes = (lines: LyricLine[]): LyricLine[] => {
         const gap = nextLyric.time - estimatedEnd;
 
         if (gap > GAP_THRESHOLD && gap >= MIN_INTERLUDE_DURATION) {
-            result.push(createInterlude(estimatedEnd));
+            result.push(createInterlude(estimatedEnd, nextLyric.time));
         }
     }
 

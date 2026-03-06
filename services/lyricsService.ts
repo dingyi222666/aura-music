@@ -6,6 +6,7 @@ const METING_API = "https://api.qijieya.cn/meting/";
 const NETEASE_SEARCH_API = "https://163api.qijieya.cn/cloudsearch";
 const NETEASE_API_BASE = "http://music.163.com/api";
 const NETEASECLOUD_API_BASE = "https://163api.qijieya.cn";
+const TTML_DB_BASE = "https://amll-ttml-db.stevexmh.net";
 
 const TIMESTAMP_REGEX = /^\[(\d{2}):(\d{2})[\.:](\d{2,3})\](.*)$/;
 
@@ -39,6 +40,14 @@ interface NeteasePlaylistResponse {
 interface NeteaseSongDetailResponse {
   code?: number;
   songs?: NeteaseApiSong[];
+}
+
+export interface MatchedLyricsResult {
+  lrc?: string;
+  yrc?: string;
+  tLrc?: string;
+  ttml?: string;
+  metadata: string[];
 }
 
 export interface NeteaseTrackInfo {
@@ -136,8 +145,63 @@ const extractMetadataLines = (content: string) => {
   };
 };
 
+const TTML_META_LABELS: Record<string, string> = {
+  musicName: "歌曲名",
+  artists: "艺术家",
+  album: "专辑",
+  ncmMusicId: "网易云 ID",
+  qqMusicId: "QQ 音乐 ID",
+  spotifyId: "Spotify ID",
+  appleMusicId: "Apple Music ID",
+  ttmlAuthorGithub: "TTML 作者 ID",
+  ttmlAuthorGithubLogin: "TTML 作者",
+};
+
+const extractTtmlMetadata = (content?: string): string[] => {
+  if (!content) return [];
+
+  const meta: string[] = [];
+  const regex = /<amll:meta[^>]*\bkey="([^"]+)"[^>]*\bvalue="([^"]*)"[^>]*\/>/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(content)) !== null) {
+    const key = match[1];
+    const value = match[2]?.trim();
+    if (!value) continue;
+    const label = TTML_META_LABELS[key] || key;
+    meta.push(`${label}: ${value}`);
+  }
+
+  if (meta.length > 0) {
+    meta.unshift("TTML 歌词来源: AMLL TTML Database");
+  }
+
+  return meta;
+};
+
 export const getNeteaseAudioUrl = (id: string) => {
   return `${METING_API}?type=url&id=${id}`;
+};
+
+const fetchTtmlByNeteaseId = async (id: string): Promise<string | null> => {
+  const url = `${TTML_DB_BASE}/ncm/${encodeURIComponent(id)}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      if (res.status !== 404) {
+        console.warn("TTML lyrics fetch failed", res.status, id);
+      }
+      return null;
+    }
+
+    const text = await res.text();
+    const trimmed = text.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  } catch (err) {
+    console.error("TTML lyrics request error", err);
+    return null;
+  }
 };
 
 // Implements the search logic from the user provided code snippet
@@ -228,7 +292,7 @@ export const fetchNeteaseSong = async (
 export const searchAndMatchLyrics = async (
   title: string,
   artist: string,
-): Promise<{ lrc: string; yrc?: string; tLrc?: string; metadata: string[] } | null> => {
+): Promise<MatchedLyricsResult | null> => {
   try {
     const songs = await searchNetEase(`${title} ${artist}`, { limit: 5 });
 
@@ -250,65 +314,68 @@ export const searchAndMatchLyrics = async (
 
 export const fetchLyricsById = async (
   songId: string,
-): Promise<{ lrc: string; yrc?: string; tLrc?: string; metadata: string[] } | null> => {
+): Promise<MatchedLyricsResult | null> => {
   try {
-    // 使用網易雲音樂 API 獲取歌詞
-    const lyricUrl = `${NETEASECLOUD_API_BASE}/lyric/new?id=${songId}`;
-    const lyricData = await fetchViaProxy(lyricUrl);
+    // Fetch TTML and NetEase lyrics in parallel
+    const [ttmlContent, lyricDataResult] = await Promise.all([
+      fetchTtmlByNeteaseId(songId),
+      (async () => {
+        const lyricUrl = `${NETEASECLOUD_API_BASE}/lyric/new?id=${songId}`;
+        try {
+          return await fetchViaProxy(lyricUrl);
+        } catch (err) {
+          console.error("Lyric fetch error", err);
+          return null;
+        }
+      })(),
+    ]);
 
-    const rawYrc = lyricData.yrc?.lyric;
-    const rawLrc = lyricData.lrc?.lyric;
-    const tLrc = lyricData.tlyric?.lyric;
+    const lyricData = lyricDataResult as any;
 
-    if (!rawYrc && !rawLrc) return null;
+    const rawYrc: string | undefined = lyricData?.yrc?.lyric;
+    const rawLrc: string | undefined = lyricData?.lrc?.lyric;
+    const tLrcRaw: string | undefined = lyricData?.tlyric?.lyric;
 
-    const {
-      clean: cleanLrc,
-      metadata: lrcMetadata,
-    } = rawLrc
-        ? extractMetadataLines(rawLrc)
-        : { clean: undefined, metadata: [] };
+    const lrcMeta = rawLrc ? extractMetadataLines(rawLrc) : { clean: undefined, metadata: [] };
+    const yrcMeta = rawYrc ? extractMetadataLines(rawYrc) : { clean: undefined, metadata: [] };
 
-    const {
-      clean: cleanYrc,
-      metadata: yrcMetadata,
-    } = rawYrc
-        ? extractMetadataLines(rawYrc)
-        : { clean: undefined, metadata: [] };
-
-    // Extract metadata from translation if available
     let cleanTranslation: string | undefined;
     let translationMetadata: string[] = [];
-    if (tLrc) {
-      const result = extractMetadataLines(tLrc);
+    if (tLrcRaw) {
+      const result = extractMetadataLines(tLrcRaw);
       cleanTranslation = result.clean;
       translationMetadata = result.metadata;
     }
 
-    const metadataSet = Array.from(
-      new Set([...lrcMetadata, ...yrcMetadata, ...translationMetadata]),
-    );
+    const ttmlMetadata = extractTtmlMetadata(ttmlContent ?? undefined);
 
-    if (lyricData.transUser?.nickname) {
-      metadataSet.unshift(`翻译贡献者: ${lyricData.transUser.nickname}`);
+    const metadataSet = new Set<string>([...lrcMeta.metadata, ...yrcMeta.metadata, ...translationMetadata, ...ttmlMetadata]);
+
+    if (lyricData?.transUser?.nickname) {
+      metadataSet.add(`翻译贡献者: ${lyricData.transUser.nickname}`);
     }
 
-    if (lyricData.lyricUser?.nickname) {
-      metadataSet.unshift(`歌词贡献者: ${lyricData.lyricUser.nickname}`);
+    if (lyricData?.lyricUser?.nickname) {
+      metadataSet.add(`歌词贡献者: ${lyricData.lyricUser.nickname}`);
     }
 
-    const baseLyrics = cleanLrc || cleanYrc || rawLrc || rawYrc;
-    if (!baseLyrics) return null;
+    const baseLyrics = lrcMeta.clean || yrcMeta.clean || rawLrc || rawYrc;
 
-    const yrcForEnrichment = cleanYrc && cleanLrc ? cleanYrc : undefined;
+    if (!ttmlContent && !baseLyrics) {
+      return null;
+    }
+
+    const yrcForEnrichment = yrcMeta.clean && lrcMeta.clean ? yrcMeta.clean : undefined;
+
     return {
       lrc: baseLyrics,
       yrc: yrcForEnrichment,
       tLrc: cleanTranslation,
+      ttml: ttmlContent ?? undefined,
       metadata: Array.from(metadataSet),
     };
   } catch (e) {
-    console.error("Lyric fetch error", e);
+    console.error("Lyric fetch pipeline error", e);
     return null;
   }
 };

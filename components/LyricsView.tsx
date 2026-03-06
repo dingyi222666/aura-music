@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { LyricLine as LyricLineType } from "../types";
-import { useLyricsPhysics } from "../hooks/useLyricsPhysics";
+import { getActiveState, useLyricsPhysics } from "../hooks/useLyricsPhysics";
 import { useCanvasRenderer } from "../hooks/useCanvasRenderer";
 import { LyricLine } from "./lyrics/LyricLine";
 import { InterludeDots } from "./lyrics/InterludeDots";
@@ -116,17 +116,19 @@ const LyricsView: React.FC<LyricsViewProps> = ({
 
     lyrics.forEach((line, index) => {
       const isInterlude = line.isInterlude || line.text === "...";
+      const next = lyrics.slice(index + 1).find((item) => {
+        return !item.isMetadata && !item.isBackground && !item.isInterlude;
+      });
 
       let duration = 0;
       if (isInterlude) {
-        const nextLine = lyrics[index + 1];
-        if (nextLine) {
-          duration = nextLine.time - line.time;
+        if (next) {
+          duration = next.time - line.time;
         }
       }
 
       const lyricLine = isInterlude
-        ? new InterludeDots(line, index, isMobile, duration)
+        ? new InterludeDots(line, index, isMobile, duration, next?.align ?? "left")
         : new LyricLine(line, index, isMobile);
 
       // Calculate max width from previous n lines
@@ -171,7 +173,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
   const marginY = 18; // Define marginY here
 
   // Physics Hook
-  const { activeIndex, handlers, linesState, updatePhysics } = useLyricsPhysics(
+  const { handlers, linesState, updatePhysics } = useLyricsPhysics(
     {
       lyrics,
       audioRef,
@@ -222,7 +224,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       const physics = linesState.current.get(i);
       if (!physics) continue;
       const visualY = physics.posY.current + focalPointOffset;
-      const h = lyricLines[i].getCurrentHeight();
+      const h = lyricLines[i].getCurrentHeight(visualTimeRef.current);
       if (clickY >= visualY && clickY <= visualY + h) {
         pressedLineRef.current = i;
         break;
@@ -326,11 +328,6 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     // Update Physics
     const dt = Math.min(deltaTime, 64) / 1000;
 
-    // Calculate current dynamic heights
-    const currentLineHeights = lyricLines.map(l => l.getCurrentHeight());
-
-    updatePhysics(dt, currentLineHeights);
-
     // Smooth visual time interpolation
     // currentTime updates infrequently (every 50-200ms), but we render at high fps
     // We need to interpolate between frames while catching up to the real time
@@ -361,7 +358,9 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       }
 
       const smoothing = 1 - Math.exp(-dt / tau);
-      visualTime += drift * smoothing;
+      const nextTime = visualTime + drift * smoothing;
+      const canRewind = drift < -0.25 || Boolean(audioRef.current?.seeking);
+      visualTime = canRewind ? nextTime : Math.max(visualTime, nextTime);
     } else {
       // When paused or scrubbing, snap quickly to real time
       const easeFactor = Math.min(1, dt * 10);
@@ -378,18 +377,43 @@ const LyricsView: React.FC<LyricsViewProps> = ({
 
     if (!lyricLines.length) return;
 
+    const active = getActiveState(lyrics, visualTime);
+    const activeSet = new Set(active.activeIndexes);
+
+    const stableLineHeights = lyricLines.map((line) => line.getTargetHeight(visualTime));
+    const currentLineHeights = lyricLines.map((line) => line.getCurrentHeight(visualTime));
+
+    updatePhysics(dt, stableLineHeights, visualTime);
+
     const paddingX = isMobile ? 24 : 56;
     const focalPointOffset = height * 0.35;
 
-    // First pass: Determine hover and visibility
-    // We can optimize this if needed, but for now iterating is fine.
-    // Actually, we need to iterate to draw anyway.
+    const queue: Array<{
+      index: number;
+      line: ILyricLine;
+      visualY: number;
+      lineHeight: number;
+      opacity: number;
+      blur: number;
+      scale: number;
+      pressScale: number;
+      isActive: boolean;
+      isHovering: boolean;
+      hoverProgress: number;
+      isPressed: boolean;
+    }> = [];
+
     lyricLines.forEach((line, index) => {
       const physics = linesState.current.get(index);
       if (!physics) return;
 
       const visualY = physics.posY.current + focalPointOffset;
       const lineHeight = currentLineHeights[index];
+
+      // Lines with zero current height are considered non-visible (e.g. background vocals far from playhead)
+      if (lineHeight <= 0.001) {
+        return;
+      }
 
       // Culling
       if (visualY + lineHeight < -100 || visualY > height + 100) {
@@ -403,7 +427,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
         mouseRef.current.y >= visualY &&
         mouseRef.current.y <= visualY + lineHeight;
 
-      const isActive = index === activeIndex;
+      const isActive = activeSet.has(index);
       const scale = physics.scale.current;
       const isHovering = isMobile
         ? mobileHoverIndex === index
@@ -426,13 +450,14 @@ const LyricsView: React.FC<LyricsViewProps> = ({
 
       let targetOpacity = 1;
       let targetBlur = 0;
+      const isBg = line.isBackgroundLine();
 
       if (!isActive) {
         const normDist = Math.min(dist, 600) / 600;
         const minOpacity = isMobile ? 0.4 : 0.25;
         targetOpacity = minOpacity + (1 - minOpacity) * (1 - Math.pow(normDist, 0.5));
 
-        if (!isMobile) {
+        if (!isMobile && !isBg) {
           targetBlur = normDist * 3;
         }
       }
@@ -452,56 +477,71 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       }
 
       // Blur: use the smoothly interpolated value, reduced by hover progress
-      const blur = blurAmount * (1 - hoverProgress);
+      const blur = isBg ? 0 : blurAmount * (1 - hoverProgress);
 
-      // Update the line's internal state (draws to its own canvas)
-      line.draw(
-        isActive ? visualTime : currentTime,
+      queue.push({
+        index,
+        line,
+        visualY,
+        lineHeight,
+        opacity,
+        blur,
+        scale,
+        pressScale,
         isActive,
         isHovering,
         hoverProgress,
-      );
-
-      // Draw the line's canvas onto the main canvas
-      ctx.save();
-
-      // Apply transformations
-      const cy = visualY + lineHeight / 2;
-      // Don't apply physics scale to interlude lines - they have their own expansion animation
-      const effectiveScale = line.isInterlude() ? 1 : scale;
-      ctx.translate(0, cy);
-      ctx.scale(effectiveScale, effectiveScale);
-      ctx.translate(0, -lineHeight / 2);
-
-      // Press scale: scale around the text content center (not left edge)
-      // so the "press" feels centered on what the user is pressing.
-      if (Math.abs(pressScale - 1) > 0.001) {
-        // Text center X ≈ paddingX + textContentWidth/2 (approximate with half logical width)
-        const textCenterX = line.getLogicalWidth() * 0.3; // bias toward left where text lives
-        const textCenterY = lineHeight / 2;
-        ctx.translate(textCenterX, textCenterY);
-        ctx.scale(pressScale, pressScale);
-        ctx.translate(-textCenterX, -textCenterY);
-      }
-
-      ctx.globalAlpha = opacity;
-      if (blur > 0.5) {
-        ctx.filter = `blur(${blur}px)`;
-      } else {
-        ctx.filter = "none";
-      }
-
-      // Use logical dimensions for HiDPI support
-      ctx.drawImage(
-        line.getCanvas(),
-        0,
-        0,
-        line.getLogicalWidth(),
-        line.getLogicalHeight(),
-      );
-
-      ctx.restore();
+        isPressed,
+      });
     });
+
+    queue
+      .sort((a, b) => {
+        if (Math.abs(a.visualY - b.visualY) > 0.5) {
+          return a.visualY - b.visualY;
+        }
+        if (a.line.isBackgroundLine() !== b.line.isBackgroundLine()) {
+          return a.line.isBackgroundLine() ? 1 : -1;
+        }
+        return a.index - b.index;
+      })
+      .forEach((item) => {
+        const useVisualTime = item.isActive || item.line.isBackgroundLine();
+        item.line.draw(
+          useVisualTime ? visualTime : currentTime,
+          item.isActive,
+          item.isHovering,
+          item.hoverProgress,
+        );
+
+        ctx.save();
+
+        const cy = item.visualY + item.lineHeight / 2;
+        const pivotX = item.line.getScalePivot();
+        const effectiveScale = item.line.isInterlude() ? 1 : item.scale;
+        ctx.translate(pivotX, cy);
+        ctx.scale(effectiveScale, effectiveScale);
+        ctx.translate(-pivotX, -item.lineHeight / 2);
+
+        if (Math.abs(item.pressScale - 1) > 0.001) {
+          const pressX = item.line.getPressPivot();
+          ctx.translate(pressX, item.lineHeight / 2);
+          ctx.scale(item.pressScale, item.pressScale);
+          ctx.translate(-pressX, -item.lineHeight / 2);
+        }
+
+        ctx.globalAlpha = item.opacity;
+        ctx.filter = item.blur > 0.5 ? `blur(${item.blur}px)` : "none";
+        ctx.drawImage(
+          item.line.getCanvas(),
+          0,
+          0,
+          item.line.getLogicalWidth(),
+          item.line.getLogicalHeight(),
+        );
+
+        ctx.restore();
+      });
 
     // Draw Mask
     ctx.globalCompositeOperation = "destination-in";
@@ -533,7 +573,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       if (!physics) continue;
 
       const visualY = physics.posY.current + focalPointOffset;
-      const h = lyricLines[i].getCurrentHeight();
+      const h = lyricLines[i].getCurrentHeight(visualTimeRef.current);
 
       if (clickY >= visualY && clickY <= visualY + h) {
         // Trigger press "pop" animation on the clicked line
