@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { LyricLine } from "../types";
-import { SpringSystem, SpringConfig, CAMERA_SPRING } from "../services/springSystem";
+import { SpringSystem, SpringConfig } from "../services/springSystem";
 
 const getNow = () =>
     typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -27,31 +27,23 @@ export interface LinePhysicsState {
     scale: SpringState;
 }
 
+const AUTO_SCROLL_SPRING: SpringConfig = {
+    mass: 1.05,
+    stiffness: 185,
+    damping: 28,
+    precision: 0.08,
+};
+
 const getLinePosSpring = (relativeIndex: number): SpringConfig => {
-    // 1. Past Lines & Active Line: Extremely fast snap (High stiffness)
     if (relativeIndex <= 0) {
-        return { mass: 1, stiffness: 1200, damping: 78, precision: 0.1 };
+        return { mass: 1, stiffness: 420, damping: 36, precision: 0.1 };
     }
 
-    // 2. Future Lines: Fast cascade with visible stagger
-    const dist = relativeIndex;
-
-    // Far-off lines: still responsive
-    if (dist > 8) {
-        return { mass: 1, stiffness: 160, damping: 28, precision: 0.1 };
+    if (relativeIndex === 1) {
+        return { mass: 1, stiffness: 380, damping: 34, precision: 0.1 };
     }
 
-    // Exponential decay for cascading feel, but with a high floor
-    const base = 700;
-    const stiffness = Math.max(180, base * Math.pow(0.7, dist));
-    const damping = Math.sqrt(stiffness) * 1.9; // Over-damped, no bounce
-
-    return {
-        mass: 1,
-        stiffness: stiffness,
-        damping: damping,
-        precision: 0.1,
-    };
+    return { mass: 1.02, stiffness: 340, damping: 32, precision: 0.1 };
 };
 
 const SCALE_SPRING: SpringConfig = {
@@ -105,7 +97,6 @@ export const useLyricsPhysics = ({
 
     // Track activeIndex changes to detect seek jumps
     const prevActiveIndexRef = useRef(-1);
-
     const RESUME_DELAY_MS = 3000;
     const FOCAL_POINT_RATIO = 0.65; // 65% from top (matched to LyricsView)
 
@@ -162,6 +153,7 @@ export const useLyricsPhysics = ({
     useEffect(() => {
         springSystem.current.setValue("scrollY", 0);
         scrollState.current.targetScrollY = 0;
+        prevActiveIndexRef.current = -1;
         markScrollIdle();
     }, [lyrics, linePositions, markScrollIdle]);
 
@@ -225,6 +217,7 @@ export const useLyricsPhysics = ({
             // Seeking to a position before any lyrics - treat as large jump
             activeIndexJump = prevActiveIndex + 1;
         }
+
         prevActiveIndexRef.current = activeIndex;
 
         // Determine if we need to snap due to a large seek jump
@@ -290,7 +283,7 @@ export const useLyricsPhysics = ({
             }
         } else {
             const autoTarget = clampScrollValue(computeActiveScrollTarget(), false);
-            system.setTarget("scrollY", autoTarget, CAMERA_SPRING);
+            system.setTarget("scrollY", autoTarget, AUTO_SCROLL_SPRING);
             sState.targetScrollY = autoTarget;
         }
 
@@ -300,7 +293,6 @@ export const useLyricsPhysics = ({
         // Use the current interpolated value as the actual scroll position
         const currentGlobalScrollY = system.getCurrent("scrollY");
         const isUserInteracting = userScrollActive;
-
 
         // 2. Update All Lines
         const springVelocity = system.getVelocity("scrollY");
@@ -358,26 +350,9 @@ export const useLyricsPhysics = ({
                 state.posY.current = state.posY.target;
                 state.posY.velocity = 0;
             } else {
-                let posConfig: SpringConfig;
-                const isMovingDown = state.posY.target > state.posY.current + 1;
-
-                if (isUserInteracting) {
-                    posConfig = { mass: 0.5, stiffness: 450, damping: 42, precision: 0.1 };
-                } else if (isMovingDown) {
-                    posConfig = { mass: 1, stiffness: 400, damping: 48, precision: 0.1 };
-                } else {
-                    const relativeIndex = index - activeIndex;
-                    const springFromIndex = getLinePosSpring(relativeIndex);
-                    // For future lines moving UP (after seek), use the stiffer of
-                    // the index-based spring or a fast upward spring
-                    if (relativeIndex > 0 && Math.abs(displacement) > 20) {
-                        const upwardStiffness = Math.max(springFromIndex.stiffness, 450);
-                        posConfig = { mass: 1, stiffness: upwardStiffness, damping: Math.sqrt(upwardStiffness) * 1.9, precision: 0.1 };
-                    } else {
-                        posConfig = springFromIndex;
-                    }
-                }
-
+                const posConfig = isUserInteracting
+                    ? { mass: 1, stiffness: 320, damping: 32, precision: 0.1 }
+                    : getLinePosSpring(relativeIndex);
                 updateSpring(state.posY, posConfig, dt);
             }
 
