@@ -53,7 +53,7 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
             Aura Music
           </h3>
           <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-medium text-white/40 tracking-wide uppercase mb-6">
-            v1.5.0 • Web
+            v1.6.0 • Web
           </div>
 
           {/* Description */}
@@ -67,9 +67,9 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
 
           {/* Tech Stack Grid */}
           <div className="w-full grid grid-cols-3 gap-2 mb-8">
-            <TechBadge label="Gemini 3" />
-            <TechBadge label="Codex" />
-            <TechBadge label="Claude" />
+            <TechBadge label="Gemini 3.1 Pro" />
+            <TechBadge label="GPT-5.4" />
+            <TechBadge label="Claude Opus 4.6" />
           </div>
 
           {/* Selection List */}
