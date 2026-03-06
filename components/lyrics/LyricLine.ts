@@ -99,11 +99,11 @@ const detectLanguage = (text: string) => {
 };
 
 const getFonts = (isMobile: boolean) => {
-  const baseSize = isMobile ? 32 : 40;
-  const transSize = isMobile ? 18 : 22;
+  const baseSize = isMobile ? 34 : 44;
+  const transSize = isMobile ? 19 : 24;
   return {
-    main: `800 ${baseSize}px "PingFang SC", "Inter", sans-serif`,
-    trans: `500 ${transSize}px "PingFang SC", "Inter", sans-serif`,
+    main: `900 ${baseSize}px "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif`,
+    trans: `600 ${transSize}px "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif`,
     mainHeight: baseSize,
     transHeight: transSize * 1.3,
   };
@@ -134,8 +134,7 @@ export class LyricLine implements ILyricLine {
     this.liftCanvas = document.createElement("canvas");
     const ctx = this.canvas.getContext("2d");
     const liftCtx = this.liftCanvas.getContext("2d");
-    if (!ctx || !liftCtx)
-      throw new Error("Could not get canvas context");
+    if (!ctx || !liftCtx) throw new Error("Could not get canvas context");
     this.ctx = ctx as
       | OffscreenCanvasRenderingContext2D
       | CanvasRenderingContext2D;
@@ -210,7 +209,11 @@ export class LyricLine implements ILyricLine {
       lineGroups.forEach((lineWords) => {
         const needsAnimation = lineWords.some((w, index) => {
           const elapsed = currentTime - w.startTime;
-          const animDuration = this.getWordAnimationDuration(w, lineWords, index);
+          const animDuration = this.getWordAnimationDuration(
+            w,
+            lineWords,
+            index,
+          );
           const lead = this.shouldEmphasizeWord(w) ? EMPHASIS_ENTRY_LEAD : 0;
           return elapsed >= -lead && elapsed < animDuration;
         });
@@ -221,7 +224,9 @@ export class LyricLine implements ILyricLine {
           this.drawActiveWords(lineWords, currentTime);
         } else if (allPast) {
           this.ctx.fillStyle = "#FFFFFF";
-          lineWords.forEach((w) => this.ctx.fillText(w.text, w.x, w.y - FLOAT_UP));
+          lineWords.forEach((w) =>
+            this.ctx.fillText(w.text, w.x, w.y - FLOAT_UP),
+          );
         } else {
           this.ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
           lineWords.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
@@ -365,10 +370,6 @@ export class LyricLine implements ILyricLine {
     const duration = word.endTime - word.startTime;
     if (duration < EMPHASIS_MIN_DURATION) return false;
 
-    if (detectLanguage(text) === "zh") {
-      return true;
-    }
-
     const charCount = Array.from(text).length;
     return charCount > 1 && charCount <= EMPHASIS_MAX_CHARS;
   }
@@ -388,16 +389,26 @@ export class LyricLine implements ILyricLine {
     words: WordLayout[],
     index: number,
   ) {
-    const duration = Math.max(EMPHASIS_MIN_DURATION, word.endTime - word.startTime);
+    const duration = Math.max(
+      EMPHASIS_MIN_DURATION,
+      word.endTime - word.startTime,
+    );
     if (!this.shouldEmphasizeWord(word)) return duration;
 
     const profile = this.getEmphasisProfile(word, words, index);
     const finalDelay = profile.stagger * Math.max(0, profile.anchorCount - 1);
-    const glowTail = Math.max(profile.span, profile.span * 1.4 - EMPHASIS_ENTRY_LEAD);
+    const glowTail = Math.max(
+      profile.span,
+      profile.span * 1.4 - EMPHASIS_ENTRY_LEAD,
+    );
     return glowTail + finalDelay;
   }
 
-  private getEmphasisProfile(word: WordLayout, words: WordLayout[], index: number) {
+  private getEmphasisProfile(
+    word: WordLayout,
+    words: WordLayout[],
+    index: number,
+  ) {
     let span = Math.max(EMPHASIS_MIN_DURATION, word.endTime - word.startTime);
     let zoom = span / 2;
     zoom = zoom > 1 ? Math.sqrt(zoom) : zoom ** 3;
@@ -484,8 +495,16 @@ export class LyricLine implements ILyricLine {
       0,
     );
     const leftMix = this.getSweepMix(glyphStart, totalWidth, progress);
-    const middleMix = this.getSweepMix(glyphStart + glyphWidth * 0.5, totalWidth, progress);
-    const rightMix = this.getSweepMix(glyphStart + glyphWidth, totalWidth, progress);
+    const middleMix = this.getSweepMix(
+      glyphStart + glyphWidth * 0.5,
+      totalWidth,
+      progress,
+    );
+    const rightMix = this.getSweepMix(
+      glyphStart + glyphWidth,
+      totalWidth,
+      progress,
+    );
 
     gradient.addColorStop(0, `rgba(255, 255, 255, ${0.5 + leftMix * 0.5})`);
     gradient.addColorStop(0.5, `rgba(255, 255, 255, ${0.5 + middleMix * 0.5})`);
@@ -516,7 +535,10 @@ export class LyricLine implements ILyricLine {
   ) {
     const { main, mainHeight } = getFonts(this.isMobile);
     const elapsed = currentTime - word.startTime;
-    const duration = Math.max(EMPHASIS_MIN_DURATION, word.endTime - word.startTime);
+    const duration = Math.max(
+      EMPHASIS_MIN_DURATION,
+      word.endTime - word.startTime,
+    );
     const progress = clamp01(elapsed / duration);
     const chars = Array.from(word.text);
 
@@ -551,7 +573,8 @@ export class LyricLine implements ILyricLine {
       const centerBias = chars.length * 0.5 - charIndex;
       const baseLift = mainHeight * EMPHASIS_RISE * settle;
       const accentLift = mainHeight * EMPHASIS_RISE * floatArc;
-      const offsetX = -accent * EMPHASIS_SWAY_X * profile.zoom * centerBias * mainHeight;
+      const offsetX =
+        -accent * EMPHASIS_SWAY_X * profile.zoom * centerBias * mainHeight;
       const offsetY = -accent * EMPHASIS_SWAY_Y * profile.zoom * mainHeight;
       const scale = 1 + accent * EMPHASIS_SCALE * profile.zoom;
       const drawX = originalOffset + offsetX;
@@ -698,7 +721,12 @@ export class LyricLine implements ILyricLine {
     return this.layout?.textWidth || 0;
   }
 
-  public draw(currentTime: number, isActive: boolean, isHovered: boolean, hoverProgress: number = isHovered ? 1 : 0) {
+  public draw(
+    currentTime: number,
+    isActive: boolean,
+    isHovered: boolean,
+    hoverProgress: number = isHovered ? 1 : 0,
+  ) {
     if (!this.layout) return;
 
     // When hoverProgress is animating (not 0 or 1), we must redraw
@@ -720,7 +748,13 @@ export class LyricLine implements ILyricLine {
     const stateChanged =
       this.lastIsActive !== isActive || this.lastIsHovered !== isHovered;
 
-    if (isActive && !hasTimedWords && !this.isDirty && !stateChanged && !hoverAnimating) {
+    if (
+      isActive &&
+      !hasTimedWords &&
+      !this.isDirty &&
+      !stateChanged &&
+      !hoverAnimating
+    ) {
       return;
     }
 
