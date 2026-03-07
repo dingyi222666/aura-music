@@ -17,7 +17,6 @@ const App: React.FC = () => {
   const { toast } = useToast();
   const playlist = usePlaylist();
   const player = usePlayer({
-    isReady: playlist.isReady,
     queue: playlist.queue,
     originalQueue: playlist.originalQueue,
     updateSongInQueue: playlist.updateSongInQueue,
