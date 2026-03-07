@@ -551,7 +551,12 @@ export const parseNeteaseLyrics = (
 
   // If LRC content provided, use as base and enrich
   if (lrcContent?.trim()) {
-    const baseLines = parseLrc(lrcContent).filter(line => !line.isInterlude);
+    const baseLines = parseLrc(lrcContent)
+      .filter(line => !line.isInterlude)
+      .map(line => ({
+        ...line,
+        endTime: undefined,
+      }));
     const enriched = enrichWithWordTiming(baseLines, tokens);
     const withInterludes = insertInterludes(enriched);
     const filtered = filterShortInterludes(withInterludes);
