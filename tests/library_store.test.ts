@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   fromStoredSong,
   parsePlaybackSnapshot,
+  restoreLibrarySnapshot,
   toStoredSong,
 } from "../services/libraryStore";
 import { PlayMode, Song } from "../types";
@@ -69,6 +70,37 @@ test("local songs are restored from stored metadata and blob url", () => {
     neteaseId: undefined,
     album: undefined,
   });
+});
+
+test("library restore keeps local songs before blob hydration", () => {
+  const snap = restoreLibrarySnapshot({
+    queue: [
+      {
+        id: "local-2",
+        title: "Saved",
+        artist: "Singer",
+        source: "local",
+      },
+    ],
+    originalQueue: [],
+  });
+
+  expect(snap.queue).toEqual([
+    {
+      id: "local-2",
+      title: "Saved",
+      artist: "Singer",
+      fileUrl: "",
+      source: "local",
+      coverUrl: undefined,
+      lyrics: undefined,
+      colors: undefined,
+      needsLyricsMatch: undefined,
+      isNetease: undefined,
+      neteaseId: undefined,
+      album: undefined,
+    },
+  ]);
 });
 
 test("playback snapshot parser keeps valid data and rejects bad modes", () => {

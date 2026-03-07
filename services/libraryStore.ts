@@ -2,9 +2,8 @@ import { PlayMode, Song } from "../types";
 
 const DB = "aura-music";
 const VER = 1;
-const META = "meta";
 const FILES = "files";
-const SNAP = "playlist";
+const LIBRARY = "aura:library";
 const PLAYBACK = "aura:playback";
 
 const MODES = [PlayMode.LOOP_ALL, PlayMode.LOOP_ONE, PlayMode.SHUFFLE];
@@ -29,7 +28,7 @@ export interface LibrarySnapshot {
   originalQueue: StoredSong[];
 }
 
-export interface HydratedSnapshot {
+export interface RestoredSnapshot {
   queue: Song[];
   originalQueue: Song[];
 }
@@ -39,10 +38,12 @@ export interface PlaybackSnapshot {
   playMode: PlayMode;
 }
 
-const getDefaultPlayback = (): PlaybackSnapshot => ({
-  songId: null,
-  playMode: PlayMode.LOOP_ALL,
-});
+const getDefaultPlayback = (): PlaybackSnapshot => {
+  return {
+    songId: null,
+    playMode: PlayMode.LOOP_ALL,
+  };
+};
 
 const hasWindow = () => {
   return typeof window !== "undefined";
@@ -58,10 +59,6 @@ const openDb = async (): Promise<IDBDatabase | null> => {
 
     req.onupgradeneeded = () => {
       const db = req.result;
-
-      if (!db.objectStoreNames.contains(META)) {
-        db.createObjectStore(META);
-      }
 
       if (!db.objectStoreNames.contains(FILES)) {
         db.createObjectStore(FILES);
@@ -89,7 +86,6 @@ const waitTx = (tx: IDBTransaction): Promise<void> => {
 };
 
 const runDb = async <T>(
-  names: string[],
   mode: IDBTransactionMode,
   run: (tx: IDBTransaction) => Promise<T>,
 ): Promise<T | null> => {
@@ -98,7 +94,7 @@ const runDb = async <T>(
     return null;
   }
 
-  const tx = db.transaction(names, mode);
+  const tx = db.transaction([FILES], mode);
 
   try {
     const value = await run(tx);
@@ -130,15 +126,11 @@ export const toStoredSong = (song: Song): StoredSong => {
 
 export const fromStoredSong = (song: StoredSong, fileUrl?: string): Song | null => {
   if (song.source === "local") {
-    if (!fileUrl) {
-      return null;
-    }
-
     return {
       id: song.id,
       title: song.title,
       artist: song.artist,
-      fileUrl,
+      fileUrl: fileUrl ?? "",
       source: "local",
       coverUrl: song.coverUrl,
       lyrics: song.lyrics,
@@ -172,6 +164,41 @@ export const fromStoredSong = (song: StoredSong, fileUrl?: string): Song | null 
   };
 };
 
+const parseLibrarySnapshot = (raw: string | null): LibrarySnapshot => {
+  if (!raw) {
+    return {
+      queue: [],
+      originalQueue: [],
+    };
+  }
+
+  try {
+    const value = JSON.parse(raw) as Partial<LibrarySnapshot>;
+    return {
+      queue: Array.isArray(value.queue) ? value.queue : [],
+      originalQueue: Array.isArray(value.originalQueue) ? value.originalQueue : [],
+    };
+  } catch {
+    return {
+      queue: [],
+      originalQueue: [],
+    };
+  }
+};
+
+export const restoreLibrarySnapshot = (snap: LibrarySnapshot): RestoredSnapshot => {
+  const restore = (list: StoredSong[]) => {
+    return list
+      .map((item) => fromStoredSong(item))
+      .filter((item): item is Song => item !== null);
+  };
+
+  return {
+    queue: restore(snap.queue),
+    originalQueue: restore(snap.originalQueue),
+  };
+};
+
 export const buildLibrarySnapshot = (
   queue: Song[],
   originalQueue: Song[],
@@ -182,33 +209,29 @@ export const buildLibrarySnapshot = (
   };
 };
 
-export const saveLibrarySnapshot = async (
+export const loadLibrarySnapshot = (): LibrarySnapshot => {
+  if (!hasWindow() || !("localStorage" in window)) {
+    return {
+      queue: [],
+      originalQueue: [],
+    };
+  }
+
+  return parseLibrarySnapshot(window.localStorage.getItem(LIBRARY));
+};
+
+export const saveLibrarySnapshot = (
   queue: Song[],
   originalQueue: Song[],
 ) => {
-  const snap = buildLibrarySnapshot(queue, originalQueue);
+  if (!hasWindow() || !("localStorage" in window)) {
+    return;
+  }
 
-  await runDb([META], "readwrite", async (tx) => {
-    await waitReq(tx.objectStore(META).put(snap, SNAP));
-    return undefined;
-  });
-};
-
-export const loadLibrarySnapshot = async (): Promise<LibrarySnapshot | null> => {
-  const value = await runDb([META], "readonly", async (tx) => {
-    const raw = await waitReq(tx.objectStore(META).get(SNAP));
-    if (!raw || typeof raw !== "object") {
-      return null;
-    }
-
-    const snap = raw as Partial<LibrarySnapshot>;
-    return {
-      queue: Array.isArray(snap.queue) ? snap.queue : [],
-      originalQueue: Array.isArray(snap.originalQueue) ? snap.originalQueue : [],
-    };
-  });
-
-  return value ?? null;
+  window.localStorage.setItem(
+    LIBRARY,
+    JSON.stringify(buildLibrarySnapshot(queue, originalQueue)),
+  );
 };
 
 export const saveLocalFiles = async (list: Array<{ id: string; file: Blob }>) => {
@@ -216,7 +239,7 @@ export const saveLocalFiles = async (list: Array<{ id: string; file: Blob }>) =>
     return;
   }
 
-  await runDb([FILES], "readwrite", async (tx) => {
+  await runDb("readwrite", async (tx) => {
     const store = tx.objectStore(FILES);
     await Promise.all(list.map((item) => waitReq(store.put(item.file, item.id))));
     return undefined;
@@ -224,7 +247,7 @@ export const saveLocalFiles = async (list: Array<{ id: string; file: Blob }>) =>
 };
 
 export const loadLocalFile = async (id: string): Promise<Blob | null> => {
-  const value = await runDb([FILES], "readonly", async (tx) => {
+  const value = await runDb("readonly", async (tx) => {
     const raw = await waitReq(tx.objectStore(FILES).get(id));
     return raw instanceof Blob ? raw : null;
   });
@@ -237,16 +260,14 @@ export const deleteLocalFiles = async (ids: string[]) => {
     return;
   }
 
-  await runDb([FILES], "readwrite", async (tx) => {
+  await runDb("readwrite", async (tx) => {
     const store = tx.objectStore(FILES);
     await Promise.all(ids.map((id) => waitReq(store.delete(id))));
     return undefined;
   });
 };
 
-export const hydrateLibrarySnapshot = async (
-  snap: LibrarySnapshot,
-): Promise<HydratedSnapshot> => {
+export const hydrateLibrarySnapshot = async (snap: LibrarySnapshot) => {
   const urls = new Map<string, string>();
 
   const hydrate = async (list: StoredSong[]) => {
@@ -266,11 +287,7 @@ export const hydrateLibrarySnapshot = async (
           urls.set(item.id, url);
         }
 
-        const song = fromStoredSong(item, url);
-        if (song) {
-          out.push(song);
-        }
-
+        out.push(fromStoredSong(item, url)!);
         continue;
       }
 
@@ -287,31 +304,6 @@ export const hydrateLibrarySnapshot = async (
     queue: await hydrate(snap.queue),
     originalQueue: await hydrate(snap.originalQueue),
   };
-};
-
-export const revokeLocalUrls = (list: Song[]) => {
-  if (!hasWindow()) {
-    return;
-  }
-
-  const seen = new Set<string>();
-
-  list.forEach((song) => {
-    if (song.source !== "local") {
-      return;
-    }
-
-    if (!song.fileUrl.startsWith("blob:")) {
-      return;
-    }
-
-    if (seen.has(song.fileUrl)) {
-      return;
-    }
-
-    seen.add(song.fileUrl);
-    URL.revokeObjectURL(song.fileUrl);
-  });
 };
 
 export const parsePlaybackSnapshot = (raw: string | null): PlaybackSnapshot => {
