@@ -390,8 +390,8 @@ const getFonts = (isMobile: boolean, scale: number = 1) => {
   const baseSize = (isMobile ? 34 : 44) * scale;
   const transSize = (isMobile ? 19 : 24) * scale;
   return {
-    main: `800 ${baseSize}px "SF Pro Display", "PingFang SC", "Helvetica Neue", "Inter", sans-serif`,
-    trans: `600 ${transSize}px "SF Pro Text", "PingFang SC", "Helvetica Neue", "Inter",sans-serif`,
+    main: `800 ${baseSize}px "SF Pro Display", "PingFang SC","Inter", sans-serif`,
+    trans: `600 ${transSize}px "SF Pro Text", "PingFang SC", "Inter",sans-serif`,
     mainHeight: baseSize,
     transHeight: transSize * 1.3,
   };
