@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const { toast } = useToast();
   const playlist = usePlaylist();
   const player = usePlayer({
+    isReady: playlist.isReady,
     queue: playlist.queue,
     originalQueue: playlist.originalQueue,
     updateSongInQueue: playlist.updateSongInQueue,
@@ -177,8 +178,7 @@ const App: React.FC = () => {
   };
 
   const handleAddToQueue = (song: Song) => {
-    playlist.setQueue((prev) => [...prev, song]);
-    playlist.setOriginalQueue((prev) => [...prev, song]);
+    playlist.addSongs([song]);
   };
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {

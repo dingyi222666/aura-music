@@ -10,6 +10,10 @@ import { Song, PlayState, PlayMode } from "../types";
 import { extractColors, shuffleArray } from "../services/utils";
 import { parseLyrics } from "../services/lyrics";
 import {
+  loadPlaybackSnapshot,
+  savePlaybackSnapshot,
+} from "../services/libraryStore";
+import {
   fetchLyricsById,
   searchAndMatchLyrics,
   MatchedLyricsResult,
@@ -19,6 +23,7 @@ import { audioResourceCache } from "../services/cache";
 type MatchStatus = "idle" | "matching" | "success" | "failed";
 
 interface UsePlayerParams {
+  isReady: boolean;
   queue: Song[];
   originalQueue: Song[];
   updateSongInQueue: (id: string, updates: Partial<Song>) => void;
@@ -46,17 +51,20 @@ const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
 };
 
 export const usePlayer = ({
+  isReady,
   queue,
   originalQueue,
   updateSongInQueue,
   setQueue,
   setOriginalQueue,
 }: UsePlayerParams) => {
+  const savedRef = useRef(loadPlaybackSnapshot());
+  const restoredRef = useRef(false);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [playState, setPlayState] = useState<PlayState>(PlayState.PAUSED);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playMode, setPlayMode] = useState<PlayMode>(PlayMode.LOOP_ALL);
+  const [playMode, setPlayMode] = useState<PlayMode>(savedRef.current.playMode);
   const [matchStatus, setMatchStatus] = useState<MatchStatus>("idle");
   const audioRef = useRef<HTMLAudioElement>(null);
   const isSeekingRef = useRef(false);
@@ -482,6 +490,30 @@ export const usePlayer = ({
       })
       .catch((err) => console.warn("Color extraction failed", err));
   }, [currentSong, updateSongInQueue]);
+
+  useEffect(() => {
+    if (!isReady || restoredRef.current) return;
+
+    restoredRef.current = true;
+
+    if (queue.length === 0) return;
+
+    const idx = savedRef.current.songId
+      ? queue.findIndex((song) => song.id === savedRef.current.songId)
+      : -1;
+
+    setCurrentIndex(idx !== -1 ? idx : 0);
+    setMatchStatus("idle");
+  }, [isReady, queue]);
+
+  useEffect(() => {
+    if (!isReady || !restoredRef.current) return;
+
+    savePlaybackSnapshot({
+      songId: currentSong?.id ?? null,
+      playMode,
+    });
+  }, [isReady, currentSong?.id, playMode]);
 
   useEffect(() => {
     if (queue.length === 0) {

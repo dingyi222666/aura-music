@@ -200,12 +200,15 @@ const SearchModal: React.FC<SearchModalProps> = ({
   };
 
   const playNeteaseTrack = (track: NeteaseTrackInfo) => {
+    const origin = getNeteaseAudioUrl(track.id);
     const song: Song = {
       id: track.id,
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl.replace("http:", "https:"),
-      fileUrl: getNeteaseAudioUrl(track.id),
+      fileUrl: origin,
+      source: "remote",
+      origin,
       isNetease: true,
       neteaseId: track.neteaseId,
       album: track.album,
@@ -216,12 +219,15 @@ const SearchModal: React.FC<SearchModalProps> = ({
   };
 
   const addNeteaseToQueue = (track: NeteaseTrackInfo) => {
+    const origin = getNeteaseAudioUrl(track.id);
     const song: Song = {
       id: track.id,
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl.replace("http:", "https:"),
-      fileUrl: getNeteaseAudioUrl(track.id),
+      fileUrl: origin,
+      source: "remote",
+      origin,
       isNetease: true,
       neteaseId: track.neteaseId,
       album: track.album,

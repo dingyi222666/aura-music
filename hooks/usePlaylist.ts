@@ -1,5 +1,13 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Song } from "../types";
+import {
+  deleteLocalFiles,
+  hydrateLibrarySnapshot,
+  loadLibrarySnapshot,
+  revokeLocalUrls,
+  saveLibrarySnapshot,
+  saveLocalFiles,
+} from "../services/libraryStore";
 import {
   extractColors,
   parseAudioMetadata,
@@ -57,6 +65,79 @@ export interface ImportResult {
 export const usePlaylist = () => {
   const [queue, setQueue] = useState<Song[]>([]);
   const [originalQueue, setOriginalQueue] = useState<Song[]>([]);
+  const [isReady, setIsReady] = useState(false);
+  const urlsRef = useRef(new Map<string, string>());
+
+  const storeUrl = useCallback((id: string, url: string) => {
+    const prev = urlsRef.current.get(id);
+    if (prev && prev !== url) {
+      URL.revokeObjectURL(prev);
+    }
+    urlsRef.current.set(id, url);
+  }, []);
+
+  const dropUrls = useCallback((ids: string[]) => {
+    ids.forEach((id) => {
+      const url = urlsRef.current.get(id);
+      if (!url) {
+        return;
+      }
+
+      URL.revokeObjectURL(url);
+      urlsRef.current.delete(id);
+    });
+  }, []);
+
+  useEffect(() => {
+    let canceled = false;
+
+    const load = async () => {
+      try {
+        const snap = await loadLibrarySnapshot();
+        if (!snap || canceled) {
+          return;
+        }
+
+        const data = await hydrateLibrarySnapshot(snap);
+        if (canceled) {
+          revokeLocalUrls([...data.queue, ...data.originalQueue]);
+          return;
+        }
+
+        [...data.queue, ...data.originalQueue].forEach((song) => {
+          if (song.source === "local" && song.fileUrl.startsWith("blob:")) {
+            storeUrl(song.id, song.fileUrl);
+          }
+        });
+
+        setQueue(data.queue);
+        setOriginalQueue(data.originalQueue);
+      } catch (err) {
+        console.warn("Failed to restore library", err);
+      } finally {
+        if (!canceled) {
+          setIsReady(true);
+        }
+      }
+    };
+
+    load();
+
+    return () => {
+      canceled = true;
+      dropUrls(Array.from(urlsRef.current.keys()));
+    };
+  }, [dropUrls, storeUrl]);
+
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
+    saveLibrarySnapshot(queue, originalQueue).catch((err) => {
+      console.warn("Failed to save library", err);
+    });
+  }, [isReady, queue, originalQueue]);
 
   const updateSongInQueue = useCallback(
     (id: string, updates: Partial<Song>) => {
@@ -76,18 +157,34 @@ export const usePlaylist = () => {
     setQueue((prev) => [...prev, ...songs]);
   }, []);
 
+  const addSongs = useCallback((songs: Song[]) => {
+    appendSongs(songs);
+  }, [appendSongs]);
+
   const removeSongs = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
+    const locals = new Set<string>();
+
     setQueue((prev) => {
       prev.forEach((song) => {
         if (ids.includes(song.id) && song.fileUrl && !song.fileUrl.startsWith("blob:")) {
           audioResourceCache.delete(song.fileUrl);
         }
+        if (ids.includes(song.id) && song.source === "local") {
+          locals.add(song.id);
+        }
       });
       return prev.filter((song) => !ids.includes(song.id));
     });
     setOriginalQueue((prev) => prev.filter((song) => !ids.includes(song.id)));
-  }, []);
+    if (locals.size > 0) {
+      const list = Array.from(locals);
+      dropUrls(list);
+      deleteLocalFiles(list).catch((err) => {
+        console.warn("Failed to delete local files", err);
+      });
+    }
+  }, [dropUrls]);
 
   const addLocalFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -130,7 +227,6 @@ export const usePlaylist = () => {
       // Process audio files
       for (let i = 0; i < audioFiles.length; i++) {
         const file = audioFiles[i];
-        const url = URL.createObjectURL(file);
         const basename = file.name.replace(/\.[^/.]+$/, "");
         let title = basename;
         let artist = "Unknown Artist";
@@ -211,7 +307,8 @@ export const usePlaylist = () => {
           id: `local-${Date.now()}-${i}`,
           title,
           artist,
-          fileUrl: url,
+          fileUrl: "",
+          source: "local",
           coverUrl,
           lyrics,
           colors: colors && colors.length > 0 ? colors : undefined,
@@ -219,10 +316,27 @@ export const usePlaylist = () => {
         });
       }
 
+      newSongs.forEach((song, idx) => {
+        const url = URL.createObjectURL(audioFiles[idx]);
+        song.fileUrl = url;
+        storeUrl(song.id, url);
+      });
+
+      try {
+        await saveLocalFiles(
+          newSongs.map((song, idx) => ({
+            id: song.id,
+            file: audioFiles[idx],
+          })),
+        );
+      } catch (err) {
+        console.warn("Failed to persist local files", err);
+      }
+
       appendSongs(newSongs);
       return newSongs;
     },
-    [appendSongs],
+    [appendSongs, storeUrl],
   );
 
   const importFromUrl = useCallback(
@@ -242,9 +356,12 @@ export const usePlaylist = () => {
         if (parsed.type === "playlist") {
           const songs = await fetchNeteasePlaylist(parsed.id);
           songs.forEach((song) => {
+            const origin = getNeteaseAudioUrl(song.id);
             newSongs.push({
               ...song,
-              fileUrl: getNeteaseAudioUrl(song.id),
+              fileUrl: origin,
+              source: "remote",
+              origin,
               lyrics: [],
               colors: [],
               needsLyricsMatch: true,
@@ -253,9 +370,12 @@ export const usePlaylist = () => {
         } else {
           const song = await fetchNeteaseSong(parsed.id);
           if (song) {
+            const origin = getNeteaseAudioUrl(song.id);
             newSongs.push({
               ...song,
-              fileUrl: getNeteaseAudioUrl(song.id),
+              fileUrl: origin,
+              source: "remote",
+              origin,
               lyrics: [],
               colors: [],
               needsLyricsMatch: true,
@@ -288,7 +408,9 @@ export const usePlaylist = () => {
   return {
     queue,
     originalQueue,
+    isReady,
     updateSongInQueue,
+    addSongs,
     removeSongs,
     addLocalFiles,
     importFromUrl,

@@ -26,6 +26,8 @@ export interface Song {
   title: string;
   artist: string;
   fileUrl: string;
+  source?: "local" | "remote";
+  origin?: string;
   coverUrl?: string;
   lyrics?: LyricLine[];
   colors?: string[]; // Array of dominant colors
