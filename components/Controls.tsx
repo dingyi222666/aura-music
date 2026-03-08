@@ -468,12 +468,12 @@ const Controls: React.FC<ControlsProps> = ({
       </div>
 
       {/* Visualizer */}
-      <div className="w-full flex justify-center h-10 mb-4 opacity-40 px-1">
+      <div className="w-full flex justify-center h-10 mb-2 opacity-40 px-1">
         <Visualizer audioRef={audioRef} isPlaying={isPlaying} />
       </div>
 
       {/* Progress Bar */}
-      <div className="w-full flex flex-col group/bar relative mb-8 px-1">
+      <div className="w-full flex flex-col group/bar relative mb-3 px-1">
         <div className="relative w-full h-3 flex items-center cursor-pointer group">
           {/* Background Track */}
           <div className="absolute inset-x-0 h-1.5 bg-white/20 rounded-full group-hover:h-3 transition-[height] duration-200"></div>
@@ -517,17 +517,17 @@ const Controls: React.FC<ControlsProps> = ({
           />
         </div>
 
-        <div className="flex justify-between w-full mt-2 text-[10px] font-semibold text-white/50 tracking-widest uppercase">
+        <div className="flex justify-between w-full mt-1.5 text-[10px] font-semibold text-white/50 tracking-widest uppercase">
           <span>{formatTime(displayTime)}</span>
           <span>{duration > 0 ? `-${formatTime(duration - displayTime)}` : "0:00"}</span>
         </div>
       </div>
 
       {/* Main Controls Row */}
-      <div className="w-full flex items-center justify-between mb-10 px-0">
+      <div className="w-full flex items-center justify-between mb-2 px-0">
         <button
           onClick={onToggleMode}
-          className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-3 transition-colors active:bg-white/20 outline-none"
+          className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-none"
           title="Playback Mode"
         >
           {getModeIcon()}
@@ -535,17 +535,17 @@ const Controls: React.FC<ControlsProps> = ({
 
         <button
           onClick={onPrev}
-          className="text-white hover:bg-white/10 rounded-full p-3 transition-colors active:bg-white/20 outline-none flex items-center justify-center transform active:scale-95"
+          className="text-white hover:bg-white/10 rounded-full p-2.5 transition-colors active:bg-white/20 outline-none flex items-center justify-center transform active:scale-95"
           aria-label="Previous"
         >
-          <PrevIcon className="w-10 h-10 fill-current" />
+          <PrevIcon className="w-9 h-9 fill-current" />
         </button>
 
         <button
           onClick={onPlayPause}
-          className="relative flex items-center justify-center p-5 hover:bg-white/10 rounded-full active:bg-white/20 transition-all outline-none transform active:scale-95 text-white"
+          className="relative flex items-center justify-center p-3.5 hover:bg-white/10 rounded-full active:bg-white/20 transition-all outline-none transform active:scale-95 text-white"
         >
-          <div className="relative w-12 h-12">
+          <div className="relative w-11 h-11">
             <PauseIcon
               className={`absolute inset-0 w-full h-full fill-current transition-all duration-300 ${isPlaying ? "opacity-100 scale-100 rotate-0" : "opacity-0 scale-50 -rotate-90"
                 }`}
@@ -559,16 +559,16 @@ const Controls: React.FC<ControlsProps> = ({
 
         <button
           onClick={onNext}
-          className="text-white hover:bg-white/10 rounded-full p-3 transition-colors active:bg-white/20 outline-none flex items-center justify-center transform active:scale-95"
+          className="text-white hover:bg-white/10 rounded-full p-2.5 transition-colors active:bg-white/20 outline-none flex items-center justify-center transform active:scale-95"
           aria-label="Next"
         >
-          <NextIcon className="w-10 h-10 fill-current" />
+          <NextIcon className="w-9 h-9 fill-current" />
         </button>
 
         <div className="relative flex items-center justify-center">
           <button
             onClick={onTogglePlaylist}
-            className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-3 transition-colors active:bg-white/20 outline-none"
+            className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-none"
             title="Queue"
           >
             <QueueIcon className="w-6 h-6 fill-current" />
@@ -578,12 +578,12 @@ const Controls: React.FC<ControlsProps> = ({
       </div>
 
       {/* Inline Volume Slider */}
-      <div className="w-full flex items-center gap-3 group/vol mb-4 px-2">
-        <VolumeLowIcon className="w-4 h-4 text-white/60 fill-current" />
-        <div className="relative flex-1 h-3 flex items-center cursor-pointer">
-          <div className="absolute inset-x-0 h-[5px] bg-white/20 rounded-full group-hover/vol:h-[10px] transition-[height] duration-200"></div>
+      <div className="w-full flex items-center gap-2 group/vol mb-0 px-1">
+        <VolumeLowIcon className="w-3.5 h-3.5 text-white/60 fill-current" />
+        <div className="relative flex-1 h-2 flex items-center cursor-pointer">
+          <div className="absolute inset-x-0 h-1 bg-white/20 rounded-full group-hover/vol:h-2 transition-[height] duration-200"></div>
           <div
-            className="absolute left-0 h-[5px] bg-white rounded-full group-hover/vol:h-[10px] transition-[height] duration-200 pointer-events-none"
+            className="absolute left-0 h-1 bg-white rounded-full group-hover/vol:h-2 transition-[height] duration-200 pointer-events-none"
             style={{ width: `${volume * 100}%` }}
           ></div>
           <input
@@ -597,7 +597,7 @@ const Controls: React.FC<ControlsProps> = ({
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 touch-none"
           />
         </div>
-        <VolumeHighIcon className="w-4 h-4 text-white/60 fill-current" />
+        <VolumeHighIcon className="w-3.5 h-3.5 text-white/60 fill-current" />
       </div>
     </div>
   );
