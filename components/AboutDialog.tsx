@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "../hooks/useI18n";
 import { AuraLogo } from "./Icons";
 
 interface AboutDialogProps {
@@ -8,6 +9,8 @@ interface AboutDialogProps {
 }
 
 const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
+  const { dict } = useI18n();
+
   if (!isOpen) return null;
 
   return createPortal(
@@ -58,11 +61,11 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
 
           {/* Description */}
           <p className="text-white/70 text-[15px] leading-relaxed mb-8 font-medium">
-            An experimental, pure web music player crafted with
+            {dict.about.descStart}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-bold mx-1">
-              Vibe Coding
+              {dict.about.descEmphasis}
             </span>
-            technology.
+            {dict.about.descEnd}
           </p>
 
           {/* Tech Stack Grid */}
@@ -81,7 +84,7 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
               onClick={(e) => e.stopPropagation()}
               className="flex items-center justify-between px-4 py-3 rounded-2xl border border-white/15 bg-white/5 text-sm font-medium text-white/80 hover:bg-white/10 transition"
             >
-              <span>View on GitHub</span>
+              <span>{dict.about.viewGitHub}</span>
               <span className="text-[11px] text-white/50">↗</span>
             </a>
 
@@ -92,7 +95,7 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
               onClick={(e) => e.stopPropagation()}
               className="flex items-center justify-between px-4 py-3 rounded-2xl border border-white/15 bg-white/5 text-sm font-medium text-white/80 hover:bg-white/10 transition"
             >
-              <span>Created by dingyi222666</span>
+              <span>{dict.about.createdBy}</span>
               <span className="text-[11px] text-white/50">↗</span>
             </a>
           </div>
@@ -104,7 +107,7 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
             onClick={onClose}
             className="w-full py-3.5 rounded-2xl text-[16px] font-semibold text-white/90 hover:bg-white/10 active:scale-[0.98] transition-all duration-200"
           >
-            Done
+            {dict.about.done}
           </button>
         </div>
       </div>

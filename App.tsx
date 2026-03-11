@@ -10,11 +10,13 @@ import TopBar from "./components/TopBar";
 import SearchModal from "./components/SearchModal";
 import { usePlaylist } from "./hooks/usePlaylist";
 import { usePlayer } from "./hooks/usePlayer";
+import { useI18n } from "./hooks/useI18n";
 import { keyboardRegistry } from "./services/keyboardRegistry";
 import MediaSessionController from "./components/MediaSessionController";
 
 const App: React.FC = () => {
   const { toast } = useToast();
+  const { dict } = useI18n();
   const playlist = usePlaylist();
   const player = usePlayer({
     isReady: playlist.isReady,
@@ -146,14 +148,14 @@ const App: React.FC = () => {
     const wasEmpty = playlist.queue.length === 0;
     const result = await playlist.importFromUrl(trimmed);
     if (!result.success) {
-      toast.error(result.message ?? "Failed to load songs from URL");
+      toast.error(result.message ?? dict.app.importFail);
       return false;
     }
     if (result.songs.length > 0) {
       setTimeout(() => {
         handlePlaylistAddition(result.songs, wasEmpty);
       }, 0);
-      toast.success(`Successfully imported ${result.songs.length} songs`);
+      toast.success(dict.app.importOk(result.songs.length));
       return true;
     }
     return false;
@@ -246,8 +248,8 @@ const App: React.FC = () => {
           duration={duration}
           trackId={currentSong?.id || "no-song"}
           onSeek={handleSeek}
-          title={currentSong?.title || "Welcome to Aura"}
-          artist={currentSong?.artist || "Select a song"}
+          title={currentSong?.title || dict.app.welcome}
+          artist={currentSong?.artist || dict.app.selectSong}
           audioRef={audioRef}
           onNext={playNext}
           onPrev={playPrev}

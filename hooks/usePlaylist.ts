@@ -20,6 +20,7 @@ import {
   getNeteaseAudioUrl,
 } from "../services/lyricsService";
 import { audioResourceCache } from "../services/cache";
+import { useI18n } from "./useI18n";
 
 // Levenshtein distance for fuzzy matching
 const levenshteinDistance = (str1: string, str2: string): number => {
@@ -63,6 +64,7 @@ export interface ImportResult {
 }
 
 export const usePlaylist = () => {
+  const { dict } = useI18n();
   const [queue, setQueue] = useState<Song[]>([]);
   const [originalQueue, setOriginalQueue] = useState<Song[]>([]);
   const [isReady, setIsReady] = useState(false);
@@ -252,7 +254,7 @@ export const usePlaylist = () => {
         const file = audioFiles[i];
         const basename = file.name.replace(/\.[^/.]+$/, "");
         let title = basename;
-        let artist = "Unknown Artist";
+        let artist = dict.playlist.unknownArtist;
         let coverUrl: string | undefined;
         let colors: string[] | undefined;
         let lyrics: { time: number; text: string }[] = [];
@@ -359,7 +361,7 @@ export const usePlaylist = () => {
       appendSongs(newSongs);
       return newSongs;
     },
-    [appendSongs, storeUrl],
+    [appendSongs, dict.playlist.unknownArtist, storeUrl],
   );
 
   const importFromUrl = useCallback(
@@ -368,8 +370,7 @@ export const usePlaylist = () => {
       if (!parsed) {
         return {
           success: false,
-          message:
-            "Invalid Netease URL. Use https://music.163.com/#/song?id=... or playlist",
+          message: dict.playlist.invalidUrl,
           songs: [],
         };
       }
@@ -409,7 +410,7 @@ export const usePlaylist = () => {
         console.error("Failed to fetch Netease music", err);
         return {
           success: false,
-          message: "Failed to load songs from URL",
+          message: dict.app.importFail,
           songs: [],
         };
       }
@@ -418,14 +419,14 @@ export const usePlaylist = () => {
       if (newSongs.length === 0) {
         return {
           success: false,
-          message: "Failed to load songs from URL",
+          message: dict.app.importFail,
           songs: [],
         };
       }
 
       return { success: true, songs: newSongs };
     },
-    [appendSongs],
+    [appendSongs, dict.app.importFail, dict.playlist.invalidUrl],
   );
 
   return {

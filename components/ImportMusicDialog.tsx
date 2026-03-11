@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "../hooks/useI18n";
 import { LinkIcon } from "./Icons";
 
 interface ImportMusicDialogProps {
@@ -13,6 +14,7 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
   onClose,
   onImport,
 }) => {
+  const { dict } = useI18n();
   const [importUrl, setImportUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -58,21 +60,21 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
           </div>
 
           <h3 className="text-xl font-bold text-white tracking-tight">
-            Import Music
+            {dict.import.title}
           </h3>
           <p className="text-white/60 text-[15px] mt-2 leading-relaxed px-2">
-            Paste a{" "}
+            {dict.import.hintStart}{" "}
             <span className="text-white/90 font-medium">
-              Netease Cloud Music
+              {dict.import.hintBrand}
             </span>{" "}
-            song or playlist link to add to queue.
+            {dict.import.hintEnd}
           </p>
 
           <input
             type="text"
             value={importUrl}
             onChange={(e) => setImportUrl(e.target.value)}
-            placeholder="https://music.163.com/..."
+            placeholder={dict.import.placeholder}
             className="w-full mt-5 bg-white/10 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white/10 transition-all text-[15px]"
             disabled={isLoading}
             autoFocus
@@ -90,7 +92,7 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
             onClick={handleClose}
             className="py-4 text-[17px] text-white/60 font-medium hover:bg-white/5 transition-colors active:bg-white/10"
           >
-            Cancel
+            {dict.import.cancel}
           </button>
           <button
             onClick={handleImport}
@@ -122,10 +124,10 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   ></path>
                 </svg>
-                <span>Importing...</span>
+                <span>{dict.import.loading}</span>
               </>
             ) : (
-              "Import"
+              dict.import.action
             )}
           </button>
         </div>

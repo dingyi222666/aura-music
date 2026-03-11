@@ -12,6 +12,7 @@ import {
 } from "./background/mobile";
 import { UIBackgroundRender } from "./background/renderer/UIBackgroundRender";
 import { WebWorkerBackgroundRender } from "./background/renderer/WebWorkerBackgroundRender";
+import { useI18n } from "../hooks/useI18n";
 
 const desktopGradientDefaults = [
   "rgb(60, 20, 80)",
@@ -48,6 +49,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
   coverUrl,
   isMobileLayout = false,
 }) => {
+  const { dict } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<
     UIBackgroundRender | WebWorkerBackgroundRender | null
@@ -134,7 +136,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
         ctx.fillStyle = "#666";
         ctx.font = "16px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("Loading layers...", width / 2, height / 2);
+        ctx.fillText(dict.bg.loading, width / 2, height / 2);
         return;
       }
 
@@ -160,7 +162,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
         ctx.restore();
       });
     },
-    [],
+    [dict.bg.loading],
   );
 
   const renderGradientFrame = useCallback((ctx: CanvasRenderingContext2D) => {

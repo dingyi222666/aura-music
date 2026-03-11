@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useSpring, animated, useTransition, to } from "@react-spring/web";
 import { formatTime } from "../services/utils";
+import { useI18n } from "../hooks/useI18n";
 import Visualizer from "./visualizer/Visualizer";
 import SmartImage from "./SmartImage";
 import {
@@ -83,6 +84,7 @@ const Controls: React.FC<ControlsProps> = ({
   isBuffering,
   playlistPanel,
 }) => {
+  const { dict } = useI18n();
   const volumeContainerRef = useRef<HTMLDivElement>(null);
   const settingsContainerRef = useRef<HTMLDivElement>(null);
 
@@ -416,7 +418,7 @@ const Controls: React.FC<ControlsProps> = ({
         {coverUrl ? (
           <SmartImage
             src={coverUrl}
-            alt="Album Art"
+            alt={dict.controls.albumArt}
             containerClassName="absolute inset-0 overflow-hidden"
             imgClassName="absolute inset-0 block w-full h-full object-cover"
             loading="eager"
@@ -424,7 +426,7 @@ const Controls: React.FC<ControlsProps> = ({
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white/20">
             <div className="text-8xl mb-4">♪</div>
-            <p className="text-sm">No Music Loaded</p>
+            <p className="text-sm">{dict.controls.noMusic}</p>
           </div>
         )}
       </animated.div>
@@ -443,7 +445,7 @@ const Controls: React.FC<ControlsProps> = ({
           <button
             onClick={() => setShowSettingsPopup(!showSettingsPopup)}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition-all outline-none flex-shrink-0"
-            title="Settings/More"
+            title={dict.controls.settings}
           >
             <div className="flex gap-[3px]">
               <div className="w-1 h-1 bg-white rounded-full opacity-90"></div>
@@ -528,7 +530,7 @@ const Controls: React.FC<ControlsProps> = ({
         <button
           onClick={onToggleMode}
           className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-none"
-          title="Playback Mode"
+          title={dict.controls.playback}
         >
           {getModeIcon()}
         </button>
@@ -536,7 +538,7 @@ const Controls: React.FC<ControlsProps> = ({
         <button
           onClick={onPrev}
           className="text-white hover:bg-white/10 rounded-full p-2.5 transition-colors active:bg-white/20 outline-none flex items-center justify-center transform active:scale-95"
-          aria-label="Previous"
+          aria-label={dict.controls.previous}
         >
           <PrevIcon className="w-9 h-9 fill-current" />
         </button>
@@ -560,7 +562,7 @@ const Controls: React.FC<ControlsProps> = ({
         <button
           onClick={onNext}
           className="text-white hover:bg-white/10 rounded-full p-2.5 transition-colors active:bg-white/20 outline-none flex items-center justify-center transform active:scale-95"
-          aria-label="Next"
+          aria-label={dict.controls.next}
         >
           <NextIcon className="w-9 h-9 fill-current" />
         </button>
@@ -569,7 +571,7 @@ const Controls: React.FC<ControlsProps> = ({
           <button
             onClick={onTogglePlaylist}
             className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-none"
-            title="Queue"
+            title={dict.controls.queue}
           >
             <QueueIcon className="w-6 h-6 fill-current" />
           </button>
@@ -676,6 +678,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({
   speed,
   onSpeedChange,
 }) => {
+  const { dict } = useI18n();
   const { speedH } = useSpring({
     speedH: ((speed - 0.5) / 1.5) * 100,
     config: { tension: 210, friction: 20 },
@@ -712,7 +715,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({
             {speed.toFixed(2)}x
           </div>
         </div>
-        <span className="text-[10px] font-medium text-white/60">Speed</span>
+        <span className="text-[10px] font-medium text-white/60">{dict.controls.speed}</span>
       </div>
 
       {/* Toggle Preserves Pitch */}
@@ -721,14 +724,14 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({
           onClick={onTogglePreservesPitch}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-200 ${preservesPitch ? "bg-white/20 text-white" : "bg-white text-black"
             }`}
-          title={preservesPitch ? "Tone Preserved" : "Vinyl Mode"}
+          title={preservesPitch ? dict.controls.tone : dict.controls.vinylMode}
         >
           <span className="text-xs font-bold">
-            {preservesPitch ? "Dig" : "Vin"}
+            {preservesPitch ? dict.controls.digitalShort : dict.controls.vinylShort}
           </span>
         </button>
         <span className="text-[10px] font-medium text-white/60 text-center leading-tight">
-          {preservesPitch ? "Digital" : "Vinyl"}
+          {preservesPitch ? dict.controls.digital : dict.controls.vinyl}
         </span>
       </div>
     </animated.div>

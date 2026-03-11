@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { useI18n } from "../hooks/useI18n";
 import { AuraLogo, SearchIcon, CloudDownloadIcon, InfoIcon, FullscreenIcon } from "./Icons";
 import AboutDialog from "./AboutDialog";
 
@@ -13,6 +14,7 @@ const TopBar: React.FC<TopBarProps> = ({
   onSearchClick,
   disabled,
 }) => {
+  const { dict } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -112,7 +114,7 @@ const TopBar: React.FC<TopBarProps> = ({
             <AuraLogo className="w-full h-full" />
           </div>
           <h1 className="text-white/90 font-bold tracking-wider text-sm uppercase hidden sm:block drop-shadow-md">
-            Aura Music
+            {dict.app.name}
           </h1>
         </div>
 
@@ -124,7 +126,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <button
             onClick={onSearchClick}
             className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-all shadow-sm"
-            title="Search (Cmd+K)"
+            title={dict.top.search}
           >
             <SearchIcon className="w-5 h-5" />
           </button>
@@ -134,7 +136,7 @@ const TopBar: React.FC<TopBarProps> = ({
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
             className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Import Local Files"
+            title={dict.top.importLocal}
           >
             <CloudDownloadIcon className="w-5 h-5" />
           </button>
@@ -143,7 +145,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <button
             onClick={() => setIsAboutOpen(true)}
             className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-all shadow-sm"
-            title="About Aura Music"
+            title={dict.top.about}
           >
             <InfoIcon className="w-5 h-5" />
           </button>
@@ -152,7 +154,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <button
             onClick={toggleFullscreen}
             className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-all shadow-sm"
-            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+            title={isFullscreen ? dict.top.exitFullscreen : dict.top.enterFullscreen}
           >
             <FullscreenIcon className="w-5 h-5" isFullscreen={isFullscreen} />
           </button>

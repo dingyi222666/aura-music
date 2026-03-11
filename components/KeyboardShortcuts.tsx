@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "../hooks/useI18n";
 import { useKeyboardScope } from "../hooks/useKeyboardScope";
 
 interface KeyboardShortcutsProps {
@@ -37,6 +38,7 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
   onToggleVolumeDialog,
   onToggleSpeedDialog,
 }) => {
+  const { dict } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -177,10 +179,10 @@ return createPortal(
           <div className="flex items-center gap-4 mb-8">
             <div className="flex-1">
               <h2 className="text-2xl font-bold tracking-tight">
-                Keyboard Shortcuts
+                {dict.keys.title}
               </h2>
               <p className="text-white/50 font-medium">
-                Quick controls for playback
+                {dict.keys.subtitle}
               </p>
             </div>
             <button
@@ -206,25 +208,25 @@ return createPortal(
 
           {/* Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
-            <ShortcutItem keys={["Space"]} label="Play / Pause" />
-            <ShortcutItem keys={["L"]} label="Loop Mode" />
-            <ShortcutItem keys={["←", "→"]} label="Seek ±5s" />
-            <ShortcutItem keys={["Ctrl", "←/→"]} label="Prev / Next Song" />
-            <ShortcutItem keys={["↑", "↓"]} label="Volume Control" />
-            <ShortcutItem keys={["V"]} label="Volume Dialog" />
-            <ShortcutItem keys={["S"]} label="Speed Dialog" />
-            <ShortcutItem keys={["Ctrl", "K"]} label="Search" />
-            <ShortcutItem keys={["Ctrl", "P"]} label="Toggle Playlist" />
-            <ShortcutItem keys={["Ctrl", "/"]} label="Toggle Shortcuts" />
+            <ShortcutItem keys={["Space"]} label={dict.keys.playPause} />
+            <ShortcutItem keys={["L"]} label={dict.keys.loop} />
+            <ShortcutItem keys={["←", "→"]} label={dict.keys.seek} />
+            <ShortcutItem keys={["Ctrl", "←/→"]} label={dict.keys.prevNext} />
+            <ShortcutItem keys={["↑", "↓"]} label={dict.keys.volume} />
+            <ShortcutItem keys={["V"]} label={dict.keys.volumeDialog} />
+            <ShortcutItem keys={["S"]} label={dict.keys.speedDialog} />
+            <ShortcutItem keys={["Ctrl", "K"]} label={dict.keys.search} />
+            <ShortcutItem keys={["Ctrl", "P"]} label={dict.keys.playlist} />
+            <ShortcutItem keys={["Ctrl", "/"]} label={dict.keys.toggle} />
           </div>
 
           {/* Footer Hint */}
           <div className="mt-8 pt-6 border-t border-white/5 text-center text-white/30 text-xs font-medium tracking-wider uppercase">
-            Press{" "}
+            {dict.keys.press}{" "}
             <kbd className="font-sans bg-white/10 px-1.5 py-0.5 rounded mx-1 text-white/60">
               Esc
             </kbd>{" "}
-            to close
+            {dict.keys.close}
           </div>
         </div>
       </div>

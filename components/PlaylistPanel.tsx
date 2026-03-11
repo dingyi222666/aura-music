@@ -10,6 +10,7 @@ import {
   TrashIcon,
   SelectAllIcon,
 } from "./Icons";
+import { useI18n } from "../hooks/useI18n";
 import { useKeyboardScope } from "../hooks/useKeyboardScope";
 import ImportMusicDialog from "./ImportMusicDialog";
 import SmartImage from "./SmartImage";
@@ -106,6 +107,7 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
     onRemove,
     accentColor
 }) => {
+    const { dict } = useI18n();
     const [isAdding, setIsAdding] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -590,9 +592,9 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                     {/* iOS 18 Style Header */}
                     <div className="px-5 pt-5 pb-3 shrink-0 flex items-center justify-between bg-transparent border-b border-white/5">
                         <div className="flex flex-col">
-                            <h3 className="text-white text-lg font-bold leading-none tracking-tight">Playing Next</h3>
+                            <h3 className="text-white text-lg font-bold leading-none tracking-tight">{dict.list.playingNext}</h3>
                             <span className="text-white/40 text-xs font-medium mt-1">
-                                {queue.length} Songs
+                                {dict.list.songs(queue.length)}
                             </span>
                         </div>
 
@@ -602,14 +604,14 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                                     <button
                                         onClick={handleSelectAll}
                                         className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${selectedIds.size === queue.length && queue.length > 0 ? 'text-white bg-white/10' : 'text-white/50 hover:text-white hover:bg-white/10'}`}
-                                        title="Select All"
+                                        title={dict.list.selectAll}
                                     >
                                         <SelectAllIcon className="w-5 h-5" />
                                     </button>
                                     <button
                                         onClick={handleDelete}
                                         className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${selectedIds.size > 0 ? 'text-red-400 hover:bg-red-500/10' : 'text-white/20 cursor-not-allowed'}`}
-                                        title="Delete Selected"
+                                        title={dict.list.deleteSelected}
                                         disabled={selectedIds.size === 0}
                                     >
                                         <TrashIcon className="w-5 h-5" />
@@ -618,7 +620,7 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                                         onClick={() => setIsEditing(false)}
                                         className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:bg-white/10"
                                         style={{ color: accentColor }}
-                                        title="Done"
+                                        title={dict.list.done}
                                     >
                                         <CheckIcon className="w-5 h-5" />
                                     </button>
@@ -628,14 +630,14 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                                     <button
                                         onClick={() => setIsAdding(true)}
                                         className="w-8 h-8 rounded-full flex items-center justify-center transition-all text-white/50 hover:text-white hover:bg-white/10"
-                                        title="Add from URL"
+                                        title={dict.list.addFromUrl}
                                     >
                                         <PlusIcon className="w-5 h-5" />
                                     </button>
                                     <button
                                         onClick={() => setIsEditing(true)}
                                         className="w-8 h-8 rounded-full flex items-center justify-center transition-all text-white/50 hover:text-white hover:bg-white/10"
-                                        title="Edit List"
+                                        title={dict.list.edit}
                                     >
                                         <QueueIcon className="w-5 h-5" />
                                     </button>
@@ -652,7 +654,7 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                     >
                         {queue.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-32 text-white/30 space-y-2">
-                                <p className="text-xs font-medium">Queue is empty</p>
+                                <p className="text-xs font-medium">{dict.list.empty}</p>
                             </div>
                         ) : (
                             <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
@@ -750,14 +752,14 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                                                  </div>
                                              </div>
 
-                                             {!isEditing && (
-                                                 <button
-                                                     type="button"
-                                                     title="Drag to reorder"
-                                                     aria-label={`Reorder ${song.title}`}
-                                                     onPointerDown={(e) => {
-                                                         e.preventDefault();
-                                                         e.stopPropagation();
+                                              {!isEditing && (
+                                                  <button
+                                                      type="button"
+                                                      title={dict.list.drag}
+                                                      aria-label={dict.list.reorder(song.title)}
+                                                      onPointerDown={(e) => {
+                                                          e.preventDefault();
+                                                          e.stopPropagation();
                                                          handlePress(e, song, index, true);
                                                      }}
                                                      onClick={(e) => {

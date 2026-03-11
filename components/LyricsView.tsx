@@ -6,6 +6,7 @@ import { LyricLine } from "./lyrics/LyricLine";
 import { InterludeDots } from "./lyrics/InterludeDots";
 import { ILyricLine } from "./lyrics/ILyricLine";
 import { LineAnimationState } from "../hooks/useAnimationInterpolator";
+import { useI18n } from "../hooks/useI18n";
 
 interface LyricsViewProps {
   lyrics: LyricLineType[];
@@ -24,6 +25,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
   onSeekRequest,
   matchStatus,
 }) => {
+  const { dict } = useI18n();
   const [isMobile, setIsMobile] = useState(false);
   const [lyricLines, setLyricLines] = useState<ILyricLine[]>([]);
   const [mobileHoverIndex, setMobileHoverIndex] = useState<number | null>(null);
@@ -689,11 +691,11 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       {!lyrics.length && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-white/40 select-none pointer-events-none">
           {matchStatus === "matching" ? (
-            <div className="animate-pulse">Syncing Lyrics...</div>
+            <div className="animate-pulse">{dict.lyrics.syncing}</div>
           ) : (
             <>
               <div className="text-4xl mb-4 opacity-50">♪</div>
-              <div>Play music to view lyrics</div>
+              <div>{dict.lyrics.empty}</div>
             </>
           )}
         </div>
