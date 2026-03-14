@@ -337,8 +337,14 @@ export const pickLang = (
     .filter(Boolean)
     .map((item) => item.toLowerCase());
 
-  if (list.some((item) => item.startsWith("zh"))) {
-    return "zh";
+  for (const item of list) {
+    if (item.startsWith("zh")) {
+      return "zh";
+    }
+
+    if (item.startsWith("en")) {
+      return "en";
+    }
   }
 
   return "en";

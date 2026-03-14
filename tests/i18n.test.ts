@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { dicts, pickLang } from "../hooks/useI18n";
 
-test("pickLang chooses Chinese when browser prefers zh", () => {
+test("pickLang follows browser language priority", () => {
   expect(pickLang(["zh-CN", "en-US"], "en-US")).toBe("zh");
-  expect(pickLang(["en-US", "zh-TW"], "en-US")).toBe("zh");
+  expect(pickLang(["en-US", "zh-TW"], "en-US")).toBe("en");
+  expect(pickLang(["fr-FR", "zh-TW"], "en-US")).toBe("zh");
 });
 
 test("pickLang falls back to English for non-Chinese locales", () => {
