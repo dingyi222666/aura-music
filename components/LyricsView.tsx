@@ -446,10 +446,15 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     const active = getActiveState(lyrics, visualTime);
     const activeSet = new Set(active.activeIndexes);
 
-    const stableLineHeights = lyricLines.map((line) => line.getTargetHeight(visualTime));
     const currentLineHeights = lyricLines.map((line) => line.getCurrentHeight(visualTime));
+    const layoutHeights = lyricLines.map((line, index) => {
+      if (line.isInterlude()) {
+        return currentLineHeights[index];
+      }
+      return line.getTargetHeight(visualTime);
+    });
 
-    updatePhysics(dt, stableLineHeights, visualTime);
+    updatePhysics(dt, layoutHeights, visualTime);
 
     const anchor = anchorRef.current >= 0 ? anchorRef.current : active.anchorIndex;
 
