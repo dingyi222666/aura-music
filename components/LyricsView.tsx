@@ -32,7 +32,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [containerHeight, setContainerHeight] = useState(0);
-  const mobileHoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Detect mobile layout
   useEffect(() => {
@@ -63,30 +63,24 @@ const LyricsView: React.FC<LyricsViewProps> = ({
   }, [currentTime, isMobile]);
 
   useEffect(() => {
-    if (!isMobile) {
-      if (mobileHoverTimeoutRef.current) {
-        clearTimeout(mobileHoverTimeoutRef.current);
-        mobileHoverTimeoutRef.current = null;
-      }
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (!isMobile || mobileHoverIndex === null) {
       return;
     }
 
-    if (mobileHoverTimeoutRef.current) {
-      clearTimeout(mobileHoverTimeoutRef.current);
-      mobileHoverTimeoutRef.current = null;
-    }
-
-    if (mobileHoverIndex !== null) {
-      mobileHoverTimeoutRef.current = setTimeout(() => {
-        setMobileHoverIndex(null);
-        mobileHoverTimeoutRef.current = null;
-      }, 5000);
-    }
+    timerRef.current = setTimeout(() => {
+      setMobileHoverIndex(null);
+      timerRef.current = null;
+    }, 5000);
 
     return () => {
-      if (mobileHoverTimeoutRef.current) {
-        clearTimeout(mobileHoverTimeoutRef.current);
-        mobileHoverTimeoutRef.current = null;
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
       }
     };
   }, [mobileHoverIndex, isMobile]);
@@ -499,11 +493,12 @@ const LyricsView: React.FC<LyricsViewProps> = ({
         mouseRef.current.x <= width - paddingX + 20 &&
         mouseRef.current.y >= visualY &&
         mouseRef.current.y <= visualY + lineHeight;
+      const hover = pressedLineRef.current ?? mobileHoverIndex;
 
       const isActive = activeSet.has(index);
       const scale = physics.scale.current;
       const isHovering = isMobile
-        ? mobileHoverIndex === index
+        ? hover === index
         : pointerHover;
 
       // Is this line currently being pressed?
