@@ -446,7 +446,7 @@ export const fetchLyricsById = async (
       ? extractMetadataLines(rawYrc)
       : { clean: undefined, metadata: [] };
 
-    const rawTranslation = rawYtl?.trim() ? rawYtl : rawTLrc;
+    const rawTranslation = rawTLrc?.trim() ? rawTLrc : rawYtl;
 
     let cleanTranslation: string | undefined;
     let translationMetadata: string[] = [];

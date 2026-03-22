@@ -104,7 +104,7 @@ const unwrapPayload = (
       content: main ?? "",
       translationContent: translationContent?.trim()
         ? translationContent
-        : ytlrc || tlyric,
+        : tlyric || ytlrc,
       options: {
         ...options,
         ...(options?.yrcContent?.trim() ? {} : lrc && yrc ? { yrcContent: yrc } : {}),

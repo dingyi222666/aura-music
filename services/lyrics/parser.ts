@@ -187,6 +187,9 @@ export const calculateEndTime = (
   if (line.words?.length) {
     const lastWord = line.words[line.words.length - 1];
     if (lastWord.endTime > line.time) {
+      if (line.isPreciseTiming) {
+        return lastWord.endTime;
+      }
       return Math.min(lastWord.endTime, nextTime);
     }
   }
