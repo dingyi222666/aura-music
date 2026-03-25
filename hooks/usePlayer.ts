@@ -25,10 +25,8 @@ type MatchStatus = "idle" | "matching" | "success" | "failed";
 interface UsePlayerParams {
   isReady: boolean;
   queue: Song[];
-  originalQueue: Song[];
   updateSongInQueue: (id: string, updates: Partial<Song>) => void;
   setQueue: Dispatch<SetStateAction<Song[]>>;
-  setOriginalQueue: Dispatch<SetStateAction<Song[]>>;
 }
 
 const MATCH_TIMEOUT_MS = 8000;
@@ -53,10 +51,8 @@ const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
 export const usePlayer = ({
   isReady,
   queue,
-  originalQueue,
   updateSongInQueue,
   setQueue,
-  setOriginalQueue,
 }: UsePlayerParams) => {
   const savedRef = useRef(loadPlaybackSnapshot());
   const restoredRef = useRef(false);
@@ -69,6 +65,8 @@ export const usePlayer = ({
   const [matchStatus, setMatchStatus] = useState<MatchStatus>("idle");
   const audioRef = useRef<HTMLAudioElement>(null);
   const isSeekingRef = useRef(false);
+  const poolRef = useRef<string[]>([]);
+  const pastRef = useRef<string[]>([]);
 
   const pauseAndResetCurrentAudio = useCallback(() => {
     if (!audioRef.current) return;
@@ -91,23 +89,34 @@ export const usePlayer = ({
     queue[currentIndex] ??
     null;
   const accentColor = currentSong?.colors?.[0] || "#a855f7";
+  const idsKey = queue.map((song) => song.id).join("\n");
 
-  const reorderForShuffle = useCallback(() => {
-    if (originalQueue.length === 0) return;
-    const currentId = currentSong?.id;
-    const pool = originalQueue.filter((song) => song.id !== currentId);
-    const shuffled = shuffleArray([...pool]);
-    if (currentId) {
-      const current = originalQueue.find((song) => song.id === currentId);
-      if (current) {
-        setQueue([current, ...shuffled]);
-        setIndex(0, [current, ...shuffled]);
-        return;
-      }
+  const pickShuffle = useCallback(() => {
+    if (queue.length === 0) {
+      return null;
     }
-    setQueue(shuffled);
-    setIndex(shuffled.length > 0 ? 0 : -1, shuffled);
-  }, [currentSong, originalQueue, setIndex, setQueue]);
+
+    const currId = currentSong?.id ?? null;
+    const ids = new Set(queue.map((song) => song.id));
+    const seen = new Set<string>();
+
+    poolRef.current = poolRef.current.filter((id) => {
+      if (!ids.has(id) || id === currId || seen.has(id)) {
+        return false;
+      }
+
+      seen.add(id);
+      return true;
+    });
+
+    if (poolRef.current.length === 0) {
+      poolRef.current = shuffleArray(
+        queue.map((song) => song.id).filter((id) => id !== currId),
+      );
+    }
+
+    return poolRef.current.shift() ?? currId ?? queue[0]?.id ?? null;
+  }, [currentSong?.id, queue]);
 
   const toggleMode = useCallback(() => {
     let nextMode: PlayMode;
@@ -119,19 +128,16 @@ export const usePlayer = ({
     setMatchStatus("idle");
 
     if (nextMode === PlayMode.SHUFFLE) {
-      reorderForShuffle();
+      const currId = currentSong?.id ?? null;
+      poolRef.current = shuffleArray(
+        queue.map((song) => song.id).filter((id) => id !== currId),
+      );
+      pastRef.current = [];
     } else {
-      setQueue(originalQueue);
-      if (currentSong) {
-        const idx = originalQueue.findIndex(
-          (song) => song.id === currentSong.id,
-        );
-        setIndex(idx !== -1 ? idx : 0, originalQueue);
-      } else {
-        setIndex(originalQueue.length > 0 ? 0 : -1, originalQueue);
-      }
+      poolRef.current = [];
+      pastRef.current = [];
     }
-  }, [playMode, reorderForShuffle, originalQueue, currentSong, setIndex, setQueue]);
+  }, [playMode, currentSong?.id, queue]);
 
   const togglePlay = useCallback(() => {
     if (!audioRef.current) return;
@@ -216,6 +222,42 @@ export const usePlayer = ({
     setDuration(0);
   }, [currentSong?.id]);
 
+  useEffect(() => {
+    if (playMode !== PlayMode.SHUFFLE) {
+      poolRef.current = [];
+      pastRef.current = [];
+      return;
+    }
+
+    const currId = currentSong?.id ?? null;
+    const ids = new Set(queue.map((song) => song.id));
+    const seen = new Set<string>();
+
+    poolRef.current = poolRef.current.filter((id) => {
+      if (!ids.has(id) || id === currId || seen.has(id)) {
+        return false;
+      }
+
+      seen.add(id);
+      return true;
+    });
+
+    pastRef.current = pastRef.current.filter((id) => ids.has(id));
+
+    const extra = queue
+      .map((song) => song.id)
+      .filter(
+        (id) =>
+          id !== currId &&
+          !poolRef.current.includes(id) &&
+          !pastRef.current.includes(id),
+      );
+
+    if (extra.length > 0) {
+      poolRef.current = [...poolRef.current, ...shuffleArray(extra)];
+    }
+  }, [idsKey, playMode, currentSong?.id, queue]);
+
   const playNext = useCallback(() => {
     if (queue.length === 0) return;
 
@@ -228,30 +270,115 @@ export const usePlayer = ({
     }
 
     pauseAndResetCurrentAudio();
+
+    if (playMode === PlayMode.SHUFFLE) {
+      const nextId = pickShuffle();
+      const currId = currentSong?.id ?? null;
+
+      if (!nextId) {
+        return;
+      }
+
+      if (currId && currId !== nextId) {
+        pastRef.current.push(currId);
+      }
+
+      const idx = queue.findIndex((song) => song.id === nextId);
+      if (idx === -1) {
+        return;
+      }
+
+      setIndex(idx);
+      setMatchStatus("idle");
+      setPlayState(PlayState.PLAYING);
+      return;
+    }
+
     const next = (currentIndex + 1) % queue.length;
     setIndex(next);
     setMatchStatus("idle");
     setPlayState(PlayState.PLAYING);
-  }, [queue.length, playMode, currentIndex, pauseAndResetCurrentAudio, setIndex]);
+  }, [
+    queue,
+    playMode,
+    currentIndex,
+    pauseAndResetCurrentAudio,
+    setIndex,
+    pickShuffle,
+    currentSong?.id,
+  ]);
 
   const playPrev = useCallback(() => {
     if (queue.length === 0) return;
     pauseAndResetCurrentAudio();
+
+    if (playMode === PlayMode.SHUFFLE) {
+      const prevId = pastRef.current.pop();
+      const currId = currentSong?.id ?? null;
+
+      if (!prevId) {
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+        }
+        setMatchStatus("idle");
+        setPlayState(PlayState.PLAYING);
+        return;
+      }
+
+      if (currId && currId !== prevId) {
+        poolRef.current = [
+          currId,
+          ...poolRef.current.filter((id) => id !== currId),
+        ];
+      }
+
+      const idx = queue.findIndex((song) => song.id === prevId);
+      if (idx === -1) {
+        return;
+      }
+
+      setIndex(idx);
+      setMatchStatus("idle");
+      setPlayState(PlayState.PLAYING);
+      return;
+    }
+
     const prev = (currentIndex - 1 + queue.length) % queue.length;
     setIndex(prev);
     setMatchStatus("idle");
     setPlayState(PlayState.PLAYING);
-  }, [queue.length, currentIndex, pauseAndResetCurrentAudio, setIndex]);
+  }, [
+    queue,
+    playMode,
+    currentIndex,
+    pauseAndResetCurrentAudio,
+    setIndex,
+    currentSong?.id,
+  ]);
 
   const playIndex = useCallback(
     (index: number) => {
       if (index < 0 || index >= queue.length) return;
       pauseAndResetCurrentAudio();
+
+      if (playMode === PlayMode.SHUFFLE) {
+        const nextId = queue[index]?.id;
+        const currId = currentSong?.id ?? null;
+
+        if (nextId) {
+          poolRef.current = poolRef.current.filter((id) => id !== nextId);
+        }
+
+        if (currId && nextId && currId !== nextId) {
+          pastRef.current.push(currId);
+        }
+      }
+
       setIndex(index);
       setPlayState(PlayState.PLAYING);
       setMatchStatus("idle");
     },
-    [queue.length, pauseAndResetCurrentAudio, setIndex],
+    [queue, playMode, pauseAndResetCurrentAudio, setIndex, currentSong?.id],
   );
 
   const handleAudioEnded = useCallback(() => {
@@ -276,22 +403,20 @@ export const usePlayer = ({
 
   const addSongAndPlay = useCallback(
     (song: Song) => {
-      // Update both queues atomically
-      setQueue((prev) => {
-        const newQueue = [...prev, song];
-        const newIndex = newQueue.length - 1;
+      if (playMode === PlayMode.SHUFFLE && currentSong?.id && currentSong.id !== song.id) {
+        pastRef.current.push(currentSong.id);
+      }
 
-        // Set index and play state immediately in the same update cycle
-        setIndex(newIndex, newQueue);
+      setQueue((prev) => {
+        const next = [...prev, song];
+        poolRef.current = poolRef.current.filter((id) => id !== song.id);
+        setIndex(next.length - 1, next);
         setPlayState(PlayState.PLAYING);
         setMatchStatus("idle");
-
-        return newQueue;
+        return next;
       });
-
-      setOriginalQueue((prev) => [...prev, song]);
     },
-    [setIndex, setQueue, setOriginalQueue],
+    [playMode, currentSong?.id, setIndex, setQueue],
   );
 
   const handlePlaylistAddition = useCallback(
@@ -302,11 +427,8 @@ export const usePlayer = ({
         setIndex(0);
         setPlayState(PlayState.PLAYING);
       }
-      if (playMode === PlayMode.SHUFFLE) {
-        reorderForShuffle();
-      }
     },
-    [currentIndex, playMode, reorderForShuffle, setIndex],
+    [currentIndex, setIndex],
   );
 
   const mergeLyricsWithMetadata = useCallback(

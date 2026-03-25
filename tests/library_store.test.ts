@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   fromStoredSong,
+  parseLibrarySnapshot,
   parsePlaybackSnapshot,
   toStoredSong,
 } from "../services/libraryStore";
@@ -96,4 +97,29 @@ test("playback snapshot parser keeps valid data and rejects bad modes", () => {
     songId: null,
     playMode: PlayMode.LOOP_ALL,
   });
+});
+
+test("library snapshot parser keeps one queue and migrates old data", () => {
+  const item = {
+    id: "1",
+    title: "Aura",
+    artist: "Test",
+    source: "remote" as const,
+    origin: "https://api.example/audio?id=1",
+  };
+
+  expect(parseLibrarySnapshot({ queue: [item] })).toEqual({
+    queue: [item],
+  });
+
+  expect(
+    parseLibrarySnapshot({
+      queue: [{ ...item, id: "old" }],
+      originalQueue: [item],
+    }),
+  ).toEqual({
+    queue: [item],
+  });
+
+  expect(parseLibrarySnapshot(null)).toBeNull();
 });

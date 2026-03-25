@@ -26,12 +26,15 @@ export interface StoredSong {
 
 export interface LibrarySnapshot {
   queue: StoredSong[];
-  originalQueue: StoredSong[];
 }
 
 export interface HydratedSnapshot {
   queue: Song[];
-  originalQueue: Song[];
+}
+
+interface LegacyLibrarySnapshot {
+  queue?: StoredSong[];
+  originalQueue?: StoredSong[];
 }
 
 export interface PlaybackSnapshot {
@@ -174,19 +177,16 @@ export const fromStoredSong = (song: StoredSong, fileUrl?: string): Song | null 
 
 export const buildLibrarySnapshot = (
   queue: Song[],
-  originalQueue: Song[],
 ): LibrarySnapshot => {
   return {
     queue: queue.map(toStoredSong),
-    originalQueue: originalQueue.map(toStoredSong),
   };
 };
 
 export const saveLibrarySnapshot = async (
   queue: Song[],
-  originalQueue: Song[],
 ) => {
-  const snap = buildLibrarySnapshot(queue, originalQueue);
+  const snap = buildLibrarySnapshot(queue);
 
   await runDb([META], "readwrite", async (tx) => {
     await waitReq(tx.objectStore(META).put(snap, SNAP));
@@ -194,18 +194,25 @@ export const saveLibrarySnapshot = async (
   });
 };
 
+export const parseLibrarySnapshot = (raw: unknown): LibrarySnapshot | null => {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const snap = raw as LegacyLibrarySnapshot;
+  const queue = Array.isArray(snap.originalQueue) && snap.originalQueue.length > 0
+    ? snap.originalQueue
+    : Array.isArray(snap.queue)
+      ? snap.queue
+      : [];
+
+  return { queue };
+};
+
 export const loadLibrarySnapshot = async (): Promise<LibrarySnapshot | null> => {
   const value = await runDb([META], "readonly", async (tx) => {
     const raw = await waitReq(tx.objectStore(META).get(SNAP));
-    if (!raw || typeof raw !== "object") {
-      return null;
-    }
-
-    const snap = raw as Partial<LibrarySnapshot>;
-    return {
-      queue: Array.isArray(snap.queue) ? snap.queue : [],
-      originalQueue: Array.isArray(snap.originalQueue) ? snap.originalQueue : [],
-    };
+    return parseLibrarySnapshot(raw);
   });
 
   return value ?? null;
@@ -285,7 +292,6 @@ export const hydrateLibrarySnapshot = async (
 
   return {
     queue: await hydrate(snap.queue),
-    originalQueue: await hydrate(snap.originalQueue),
   };
 };
 

@@ -66,7 +66,6 @@ export interface ImportResult {
 export const usePlaylist = () => {
   const { dict } = useI18n();
   const [queue, setQueue] = useState<Song[]>([]);
-  const [originalQueue, setOriginalQueue] = useState<Song[]>([]);
   const [isReady, setIsReady] = useState(false);
   const urlsRef = useRef(new Map<string, string>());
 
@@ -102,18 +101,17 @@ export const usePlaylist = () => {
 
         const data = await hydrateLibrarySnapshot(snap);
         if (canceled) {
-          revokeLocalUrls([...data.queue, ...data.originalQueue]);
+          revokeLocalUrls(data.queue);
           return;
         }
 
-        [...data.queue, ...data.originalQueue].forEach((song) => {
+        data.queue.forEach((song) => {
           if (song.source === "local" && song.fileUrl.startsWith("blob:")) {
             storeUrl(song.id, song.fileUrl);
           }
         });
 
         setQueue(data.queue);
-        setOriginalQueue(data.originalQueue);
       } catch (err) {
         console.warn("Failed to restore library", err);
       } finally {
@@ -136,17 +134,14 @@ export const usePlaylist = () => {
       return;
     }
 
-    saveLibrarySnapshot(queue, originalQueue).catch((err) => {
+    saveLibrarySnapshot(queue).catch((err) => {
       console.warn("Failed to save library", err);
     });
-  }, [isReady, queue, originalQueue]);
+  }, [isReady, queue]);
 
   const updateSongInQueue = useCallback(
     (id: string, updates: Partial<Song>) => {
       setQueue((prev) =>
-        prev.map((song) => (song.id === id ? { ...song, ...updates } : song)),
-      );
-      setOriginalQueue((prev) =>
         prev.map((song) => (song.id === id ? { ...song, ...updates } : song)),
       );
     },
@@ -155,7 +150,6 @@ export const usePlaylist = () => {
 
   const appendSongs = useCallback((songs: Song[]) => {
     if (songs.length === 0) return;
-    setOriginalQueue((prev) => [...prev, ...songs]);
     setQueue((prev) => [...prev, ...songs]);
   }, []);
 
@@ -167,23 +161,20 @@ export const usePlaylist = () => {
     if (ids.length === 0) return;
 
     const order = new Map(ids.map((id, idx) => [id, idx]));
-    const sort = (list: Song[]) => {
+    setQueue((prev) => {
       if (
-        list.length !== ids.length ||
+        prev.length !== ids.length ||
         order.size !== ids.length ||
-        list.some((song) => !order.has(song.id))
+        prev.some((song) => !order.has(song.id))
       ) {
-        return list;
+        return prev;
       }
 
-      return [...list].sort(
+      return [...prev].sort(
         (a, b) =>
           (order.get(a.id) ?? ids.length) - (order.get(b.id) ?? ids.length),
       );
-    };
-
-    setQueue(sort);
-    setOriginalQueue(sort);
+    });
   }, []);
 
   const removeSongs = useCallback((ids: string[]) => {
@@ -201,7 +192,6 @@ export const usePlaylist = () => {
       });
       return prev.filter((song) => !ids.includes(song.id));
     });
-    setOriginalQueue((prev) => prev.filter((song) => !ids.includes(song.id)));
     if (locals.size > 0) {
       const list = Array.from(locals);
       dropUrls(list);
@@ -431,7 +421,6 @@ export const usePlaylist = () => {
 
   return {
     queue,
-    originalQueue,
     isReady,
     updateSongInQueue,
     addSongs,
@@ -440,6 +429,5 @@ export const usePlaylist = () => {
     addLocalFiles,
     importFromUrl,
     setQueue,
-    setOriginalQueue,
   };
 };

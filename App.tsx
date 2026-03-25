@@ -21,10 +21,8 @@ const App: React.FC = () => {
   const player = usePlayer({
     isReady: playlist.isReady,
     queue: playlist.queue,
-    originalQueue: playlist.originalQueue,
     updateSongInQueue: playlist.updateSongInQueue,
     setQueue: playlist.setQueue,
-    setOriginalQueue: playlist.setOriginalQueue,
   });
 
   const {
