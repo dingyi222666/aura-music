@@ -21,14 +21,27 @@ const BG_FUTURE_ALPHA = 0.42;
 const BG_IDLE_ALPHA = 0.24;
 const BG_TRANS_ALPHA = 0.74;
 const TRANS_ALPHA = 0.8;
-const BG_SPRING: SpringConfig = {
-  mass: 0.95,
-  stiffness: 150,
-  damping: 24,
+const BG_SHOW_SPRING: SpringConfig = {
+  mass: 1.42,
+  stiffness: 56,
+  damping: 15,
+  precision: 0.001,
+};
+
+const BG_HIDE_SPRING: SpringConfig = {
+  mass: 1.28,
+  stiffness: 74,
+  damping: 16,
   precision: 0.001,
 };
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const easeOutPow = (value: number, power: number) =>
+  1 - Math.pow(1 - clamp01(value), power);
+const revealShapeOf = (value: number, visible: boolean) => ({
+  x: Math.max(0.001, visible ? easeOutPow(value, 2.15) : Math.pow(clamp01(value), 1.45)),
+  y: Math.max(0.001, visible ? easeOutPow(value, 1.45) : Math.pow(clamp01(value), 1.08)),
+});
 const smoothStep = (start: number, end: number, value: number) => {
   if (start === end) return value >= end ? 1 : 0;
   const t = clamp01((value - start) / (end - start));
@@ -495,7 +508,8 @@ export class LyricLine implements ILyricLine {
       this.bgSpring.setValue("show", 0);
     }
 
-    this.bgSpring.setTarget("show", show, BG_SPRING);
+    const cfg = show >= current ? BG_SHOW_SPRING : BG_HIDE_SPRING;
+    this.bgSpring.setTarget("show", show, cfg);
     this.bgSpring.update(dt);
     this.bgTime = currentTime;
     this.bgShow = clamp01(this.bgSpring.getCurrent("show"));
@@ -507,27 +521,7 @@ export class LyricLine implements ILyricLine {
     show = this.getBackgroundShow(currentTime),
   ) {
     if (!this.lyricLine.isBackground) return 1;
-    if (!Number.isFinite(currentTime)) {
-      return show;
-    }
-
-    const t = currentTime as number;
-    const bounds = this.getBackgroundBounds();
-
-    if (!bounds.end) {
-      const delta = bounds.start - t;
-      return Math.max(0, 1 - Math.abs(delta) / 4) * show;
-    }
-
-    if (t < bounds.start - BG_LEAD) return 0;
-    if (t < bounds.start) {
-      return smoothStep(bounds.start - BG_LEAD, bounds.start, t) * show;
-    }
-    if (t <= bounds.end) return show;
-    if (t < bounds.end + BG_TRAIL) {
-      return (1 - smoothStep(bounds.end, bounds.end + BG_TRAIL, t)) * show;
-    }
-    return 0;
+    return show > 0.001 ? 1 : 0;
   }
 
   private isInTimeRange(currentTime: number): boolean {
@@ -593,17 +587,17 @@ export class LyricLine implements ILyricLine {
     this.ctx.save();
 
     const isBackground = Boolean(this.lyricLine.isBackground);
+    let show = 1;
 
     if (isBackground) {
-      const show = this.getBackgroundShow(currentTime);
-      const fade = this.getBackgroundFade(currentTime, show);
+      show = this.getBackgroundShow(currentTime);
+      const shape = revealShapeOf(show, this.hasBackgroundWindow(currentTime));
       const shown = show > 0.001;
-      this.visibility = shown ? show : 0;
+      this.visibility = shown ? shape.y : 0;
       if (!shown) {
         this.ctx.restore();
         return;
       }
-      this.ctx.globalAlpha = fade;
     } else {
       this.visibility = 1;
     }
@@ -623,10 +617,8 @@ export class LyricLine implements ILyricLine {
     this.ctx.translate(translateX, 0);
 
     if (isBackground) {
-      const show = Math.max(0.001, this.getBackgroundShow(currentTime));
-      const rise = (1 - show) * mainHeight * 0.35;
-      this.ctx.translate(0, rise);
-      this.ctx.scale(1, show);
+      const shape = revealShapeOf(show, this.hasBackgroundWindow(currentTime));
+      this.ctx.scale(shape.x, shape.y);
     }
 
     if (hoverProgress > 0.001) {
@@ -1170,8 +1162,7 @@ export class LyricLine implements ILyricLine {
     const isBackground = Boolean(this.lyricLine.isBackground);
     const bgShow = isBackground ? this.getBackgroundShow(currentTime) : 0;
     const bgActive = isBackground && this.isInTimeRange(currentTime);
-    const bgVisible =
-      isBackground && this.getBackgroundFade(currentTime, bgShow) > 0.001;
+    const bgVisible = isBackground && bgShow > 0.001;
 
     // When hoverProgress is animating (not 0 or 1), we must redraw
     const hoverAnimating = hoverProgress > 0.001 && hoverProgress < 0.999;
@@ -1237,7 +1228,10 @@ export class LyricLine implements ILyricLine {
 
   public getCurrentHeight(currentTime?: number) {
     if (this.lyricLine.isBackground) {
-      return this._height * this.getBackgroundShow(currentTime);
+      return this._height * revealShapeOf(
+        this.getBackgroundShow(currentTime),
+        this.hasBackgroundWindow(currentTime),
+      ).y;
     }
     return this._height;
   }

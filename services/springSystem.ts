@@ -77,9 +77,9 @@ export const CAMERA_SPRING: SpringConfig = {
 
 // Interlude Spring: Smooth expansion/collapse
 export const INTERLUDE_SPRING: SpringConfig = {
-  mass: 1,
-  stiffness: 120,
-  damping: 20,
+  mass: 1.45,
+  stiffness: 40,
+  damping: 13,
   precision: 0.001,
 };
 

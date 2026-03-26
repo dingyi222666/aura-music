@@ -464,22 +464,6 @@ export const useLyricsPhysics = ({
     () => getScrollGroups(lyrics, anchors),
     [anchors, lyrics],
   );
-  const homes = useMemo(() => {
-    const list = new Array(lyrics.length).fill(-1);
-
-    groups.forEach((group) => {
-      group.items.forEach((index) => {
-        list[index] = group.start;
-      });
-    });
-
-    anchors.forEach((anchor, index) => {
-      if (!lyrics[index]?.isBackground) return;
-      list[index] = anchor >= 0 && list[anchor] >= 0 ? list[anchor] : anchor;
-    });
-
-    return list;
-  }, [anchors, groups, lyrics]);
 
   const buildLayout = useCallback(
     (heights: number[]) => {
@@ -729,14 +713,6 @@ export const useLyricsPhysics = ({
         layoutHeights && layoutHeights.length > 0 ? layoutHeights : lineHeights
       ).slice();
 
-      if (anchor >= 0) {
-        activeHeights.forEach((_, index) => {
-          if (!lyrics[index]?.isBackground) return;
-          if (homes[index] < 0 || homes[index] >= anchor) return;
-          activeHeights[index] = 0;
-        });
-      }
-
       const layout = buildLayout(activeHeights);
       const currentPositions = layout.positions;
       const contentBottom = layout.bottom;
@@ -949,7 +925,6 @@ export const useLyricsPhysics = ({
       currentTime,
       groups,
       anchors,
-      homes,
       lineHeights,
       buildLayout,
       focusOffsets,

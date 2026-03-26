@@ -3,6 +3,13 @@ import { ILyricLine } from "./ILyricLine";
 import { SpringSystem, INTERLUDE_SPRING } from "../../services/springSystem";
 
 const DOT_SHIFT = 6;
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const easeOutPow = (value: number, power: number) =>
+    1 - Math.pow(1 - clamp01(value), power);
+const revealShapeOf = (value: number, visible: boolean) => ({
+    x: Math.max(0.001, visible ? easeOutPow(value, 2.15) : Math.pow(clamp01(value), 1.45)),
+    y: Math.max(0.001, visible ? easeOutPow(value, 1.45) : Math.pow(clamp01(value), 1.08)),
+});
 
 export const dotWidthOf = (spacing: number, radius: number) => spacing * 2 + radius * 2;
 
@@ -81,7 +88,7 @@ export class InterludeDots implements ILyricLine {
 
     private getExpansion(currentTime?: number) {
         if (!Number.isFinite(currentTime)) {
-            return Math.max(0, this.springSystem.getCurrent("expansion"));
+            return clamp01(this.springSystem.getCurrent("expansion"));
         }
 
         if (this.cacheTime === currentTime) {
@@ -98,7 +105,7 @@ export class InterludeDots implements ILyricLine {
         const targetExpansion = this.isActiveTime(currentTime) ? 1 : 0;
 
         if (currentTarget === 1 && targetExpansion === 0) {
-            this.springSystem.setVelocity("expansion", 8);
+            this.springSystem.setVelocity("expansion", 0);
         }
 
         if (currentTarget === 0 && targetExpansion === 1 && currentExpansion < 0.01) {
@@ -109,7 +116,7 @@ export class InterludeDots implements ILyricLine {
         this.springSystem.update(dt);
 
         this.cacheTime = currentTime as number;
-        this.cacheExpansion = Math.max(0, this.springSystem.getCurrent("expansion"));
+        this.cacheExpansion = clamp01(this.springSystem.getCurrent("expansion"));
         return this.cacheExpansion;
     }
 
@@ -134,6 +141,10 @@ export class InterludeDots implements ILyricLine {
             this.ctx.scale(this.pixelRatio, this.pixelRatio);
         }
 
+        this.lastDrawTime = -1;
+        this.cacheTime = Number.NaN;
+        this.cacheExpansion = clamp01(this.springSystem.getCurrent("expansion"));
+
         // Calculate approximate width for hover background
         this.textWidth = dotWidthOf(dotSpacing, baseRadius);
     }
@@ -142,6 +153,7 @@ export class InterludeDots implements ILyricLine {
         const now = performance.now();
         const active = isActive || this.isActiveTime(currentTime);
         const expansion = this.getExpansion(currentTime);
+        const shape = revealShapeOf(expansion, this.isActiveTime(currentTime));
 
         // Clear canvas
         this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
@@ -163,6 +175,9 @@ export class InterludeDots implements ILyricLine {
             contentWidth,
         );
         const totalDotsWidth = contentWidth;
+        const originX = startX - 16;
+        const groupCenterX = 16 + baseRadius + dotSpacing;
+        const groupCenterY = this._height * 0.5;
 
         // Calculate Progress
         // If active, we calculate progress based on line time and duration.
@@ -181,27 +196,16 @@ export class InterludeDots implements ILyricLine {
         }
 
         this.ctx.save();
+        this.ctx.translate(originX, 0);
+        this.ctx.scale(shape.x, shape.y);
 
         // Draw hover background (round rect) — smooth fade using hoverProgress
         if (hoverProgress > 0.001) {
-            this.ctx.fillStyle = `rgba(255, 255, 255, ${0.08 * hoverProgress * Math.min(1, expansion)})`;
+            this.ctx.fillStyle = `rgba(255, 255, 255, ${0.08 * hoverProgress * shape.y})`;
             const bgWidth = Math.max(totalDotsWidth + 80, 200);
-            const bgHeight = this._height * Math.min(1, expansion);
-            const bgY = (this._height - bgHeight) / 2;
-            const bgX = this.align === "right"
-                ? startX + totalDotsWidth - bgWidth + 16
-                : startX - 16;
-
-            this.roundRect(bgX, bgY, bgWidth, bgHeight, 16 * Math.min(1, expansion));
+            this.roundRect(0, 0, bgWidth, this._height, 16);
             this.ctx.fill();
         }
-
-        // Calculate center of the dot group for scaling pivot
-        const groupCenterX = startX + baseRadius + dotSpacing;
-        const groupCenterY = this._height / 2;
-
-        // Center vertically and horizontally at group center
-        this.ctx.translate(groupCenterX, groupCenterY);
 
         // Global Breathing Animation (only when active/visible)
         // "Effect is too big. Scale down!" -> Reduce amplitude
@@ -210,9 +214,9 @@ export class InterludeDots implements ILyricLine {
         const breatheScale = 1.0 + Math.sin(now / 1000 * breatheSpeed) * breatheAmt;
         
         // Combine physics expansion with breathing
-        const finalGlobalScale = expansion * breatheScale;
-
-        this.ctx.scale(finalGlobalScale, finalGlobalScale);
+        this.ctx.translate(groupCenterX, groupCenterY);
+        this.ctx.scale(breatheScale, breatheScale);
+        this.ctx.translate(-groupCenterX, -groupCenterY);
 
         for (let i = 0; i < 3; i++) {
             // Calculate color based on progress
@@ -227,9 +231,7 @@ export class InterludeDots implements ILyricLine {
             // Base opacity 0.5 (Gray), Active 1.0 (White)
             const colorIntensity = 0.5 + 0.5 * clampedLocal;
             
-            const visibilityOpacity = Math.min(1, expansion); 
-            
-            const opacity = colorIntensity * visibilityOpacity;
+            const opacity = colorIntensity;
 
             this.ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
             this.ctx.beginPath();
@@ -238,9 +240,9 @@ export class InterludeDots implements ILyricLine {
             // Dot 0: -spacing
             // Dot 1: 0
             // Dot 2: +spacing
-            const relativeX = (i - 1) * dotSpacing;
+            const relativeX = groupCenterX + (i - 1) * dotSpacing;
             
-            this.ctx.arc(relativeX, 0, baseRadius, 0, Math.PI * 2);
+            this.ctx.arc(relativeX, groupCenterY, baseRadius, 0, Math.PI * 2);
             this.ctx.fill();
         }
 
@@ -264,8 +266,10 @@ export class InterludeDots implements ILyricLine {
     }
 
     public getCurrentHeight(_currentTime?: number) {
-        const expansion = Math.max(0, Math.min(1, this.getExpansion(_currentTime)));
-        return this._height * expansion;
+        return this._height * revealShapeOf(
+            this.getExpansion(_currentTime),
+            this.isActiveTime(_currentTime),
+        ).y;
     }
 
     public getTargetHeight(currentTime?: number) {

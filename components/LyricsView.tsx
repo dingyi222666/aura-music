@@ -456,7 +456,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
 
     const currentLineHeights = lyricLines.map((line) => line.getCurrentHeight(visualTime));
     const layoutHeights = lyricLines.map((line, index) => {
-      if (line.isInterlude()) {
+      if (line.isInterlude() || line.isBackgroundLine()) {
         return currentLineHeights[index];
       }
       return line.getTargetHeight(visualTime);
