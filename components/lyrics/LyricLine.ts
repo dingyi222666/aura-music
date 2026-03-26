@@ -9,7 +9,14 @@ const EMPHASIS_RISE = 0.05;
 const EMPHASIS_SWAY_X = 0.03;
 const EMPHASIS_SWAY_Y = 0.025;
 const EMPHASIS_SCALE = 0.1;
-const EMPHASIS_GLOW = 0.3;
+const EMPHASIS_GLOW_GAIN = 1.2;
+const EMPHASIS_GLOW_CORE = 0.48;
+const EMPHASIS_GLOW_MID = 0.24;
+const EMPHASIS_GLOW_WIDE = 0.12;
+const EMPHASIS_GLOW_TIGHT = 0.14;
+const EMPHASIS_GLOW_SOFT = 0.34;
+const EMPHASIS_GLOW_AURA = 0.72;
+const EMPHASIS_GLOW_PAD = 0.9;
 const EMPHASIS_TRAIL = 1.2;
 const EMPHASIS_SPLIT = 0.5;
 const BG_LEAD = 0.9;
@@ -449,6 +456,8 @@ export class LyricLine implements ILyricLine {
   private logicalHeight: number = 0;
   private liftCanvas: OffscreenCanvas | HTMLCanvasElement;
   private liftCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+  private glowCanvas: OffscreenCanvas | HTMLCanvasElement;
+  private glowCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
   private visibility: number = 1;
   private bgSpring?: SpringSystem;
   private bgStamp = -1;
@@ -543,13 +552,20 @@ export class LyricLine implements ILyricLine {
       typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
     this.canvas = document.createElement("canvas");
     this.liftCanvas = document.createElement("canvas");
+    this.glowCanvas = document.createElement("canvas");
     const ctx = this.canvas.getContext("2d");
     const liftCtx = this.liftCanvas.getContext("2d");
-    if (!ctx || !liftCtx) throw new Error("Could not get canvas context");
+    const glowCtx = this.glowCanvas.getContext("2d");
+    if (!ctx || !liftCtx || !glowCtx) {
+      throw new Error("Could not get canvas context");
+    }
     this.ctx = ctx as
       | OffscreenCanvasRenderingContext2D
       | CanvasRenderingContext2D;
     this.liftCtx = liftCtx as
+      | OffscreenCanvasRenderingContext2D
+      | CanvasRenderingContext2D;
+    this.glowCtx = glowCtx as
       | OffscreenCanvasRenderingContext2D
       | CanvasRenderingContext2D;
 
@@ -856,6 +872,46 @@ export class LyricLine implements ILyricLine {
     return smoothStep(positionX - fadeWidth, positionX + fadeWidth, sweepX);
   }
 
+  private fitBuffer(
+    canvas: OffscreenCanvas | HTMLCanvasElement,
+    width: number,
+    height: number,
+  ) {
+    if (canvas.width < width || canvas.height < height) {
+      canvas.width = Math.max(canvas.width, width);
+      canvas.height = Math.max(canvas.height, height);
+    }
+  }
+
+  private drawGlow(
+    alpha: number,
+    blur: number,
+    srcWidth: number,
+    srcHeight: number,
+    width: number,
+    height: number,
+  ) {
+    if (alpha <= 0.001) return;
+
+    this.liftCtx.save();
+    this.liftCtx.scale(this.pixelRatio, this.pixelRatio);
+    this.liftCtx.globalCompositeOperation = "lighter";
+    this.liftCtx.globalAlpha = alpha;
+    this.liftCtx.filter = blur > 0.001 ? `blur(${blur.toFixed(2)}px)` : "none";
+    this.liftCtx.drawImage(
+      this.glowCanvas,
+      0,
+      0,
+      srcWidth,
+      srcHeight,
+      0,
+      0,
+      width,
+      height,
+    );
+    this.liftCtx.restore();
+  }
+
   private drawBufferedEmphasisGlyph(
     glyph: string,
     font: string,
@@ -870,35 +926,62 @@ export class LyricLine implements ILyricLine {
     scale: number,
     enableGlow: boolean,
   ) {
-    const sidePad = Math.max(6, Math.ceil(fontHeight * 0.35));
-    const topPad = Math.max(4, Math.ceil(fontHeight * 0.28));
-    const bottomPad = Math.max(8, Math.ceil(fontHeight * 0.6));
+    const sidePad = Math.max(16, Math.ceil(fontHeight * EMPHASIS_GLOW_PAD));
+    const topPad = Math.max(10, Math.ceil(fontHeight * 0.58));
+    const bottomPad = Math.max(14, Math.ceil(fontHeight * 0.9));
     const logicalWidth = glyphWidth + sidePad * 2;
     const logicalHeight = fontHeight + topPad + bottomPad;
     const physicalWidth = Math.ceil(logicalWidth * this.pixelRatio);
     const physicalHeight = Math.ceil(logicalHeight * this.pixelRatio);
 
-    if (
-      this.liftCanvas.width < physicalWidth ||
-      this.liftCanvas.height < physicalHeight
-    ) {
-      this.liftCanvas.width = Math.max(this.liftCanvas.width, physicalWidth);
-      this.liftCanvas.height = Math.max(this.liftCanvas.height, physicalHeight);
-    }
+    this.fitBuffer(this.liftCanvas, physicalWidth, physicalHeight);
+    this.fitBuffer(this.glowCanvas, physicalWidth, physicalHeight);
+
+    this.glowCtx.clearRect(0, 0, this.glowCanvas.width, this.glowCanvas.height);
+    this.glowCtx.save();
+    this.glowCtx.scale(this.pixelRatio, this.pixelRatio);
+    this.glowCtx.font = font;
+    this.glowCtx.textBaseline = "top";
+    this.glowCtx.fillStyle = "rgba(255, 255, 255, 1)";
+    this.glowCtx.fillText(glyph, sidePad, topPad);
+    this.glowCtx.restore();
 
     this.liftCtx.clearRect(0, 0, this.liftCanvas.width, this.liftCanvas.height);
+    const glow = Math.min(1, glowLevel * EMPHASIS_GLOW_GAIN);
+
+    if (enableGlow && glow > 0.001) {
+      this.drawGlow(
+        glow * EMPHASIS_GLOW_WIDE,
+        fontHeight * EMPHASIS_GLOW_AURA,
+        physicalWidth,
+        physicalHeight,
+        logicalWidth,
+        logicalHeight,
+      );
+      this.drawGlow(
+        glow * EMPHASIS_GLOW_MID,
+        fontHeight * EMPHASIS_GLOW_SOFT,
+        physicalWidth,
+        physicalHeight,
+        logicalWidth,
+        logicalHeight,
+      );
+      this.drawGlow(
+        glow * EMPHASIS_GLOW_CORE,
+        fontHeight * EMPHASIS_GLOW_TIGHT,
+        physicalWidth,
+        physicalHeight,
+        logicalWidth,
+        logicalHeight,
+      );
+    }
+
     this.liftCtx.save();
     this.liftCtx.scale(this.pixelRatio, this.pixelRatio);
     this.liftCtx.font = font;
     this.liftCtx.textBaseline = "top";
-
-    if (enableGlow && glowLevel > 0.001) {
-      this.liftCtx.shadowColor = `rgba(255, 255, 255, ${glowLevel * EMPHASIS_GLOW})`;
-      this.liftCtx.shadowBlur = fontHeight * 0.22 * glowLevel;
-    } else {
-      this.liftCtx.shadowColor = "transparent";
-      this.liftCtx.shadowBlur = 0;
-    }
+    this.liftCtx.globalCompositeOperation = "source-over";
+    this.liftCtx.filter = "none";
 
     const gradient = this.liftCtx.createLinearGradient(
       sidePad,
@@ -921,6 +1004,14 @@ export class LyricLine implements ILyricLine {
     gradient.addColorStop(0, `rgba(255, 255, 255, ${0.5 + leftMix * 0.5})`);
     gradient.addColorStop(0.5, `rgba(255, 255, 255, ${0.5 + middleMix * 0.5})`);
     gradient.addColorStop(1, `rgba(255, 255, 255, ${0.5 + rightMix * 0.5})`);
+
+    if (enableGlow && glow > 0.001) {
+      this.liftCtx.shadowColor = `rgba(255, 255, 255, ${(glow * 0.9).toFixed(3)})`;
+      this.liftCtx.shadowBlur = fontHeight * 0.08;
+    } else {
+      this.liftCtx.shadowColor = "transparent";
+      this.liftCtx.shadowBlur = 0;
+    }
 
     this.liftCtx.fillStyle = gradient;
     this.liftCtx.fillText(glyph, sidePad, topPad);
@@ -1000,7 +1091,7 @@ export class LyricLine implements ILyricLine {
         word.width,
         progress,
       );
-      const glowLevel = accent * profile.bloom * glowMix;
+      const glowLevel = accent * profile.bloom * (0.38 + glowMix * 0.62);
 
       this.drawBufferedEmphasisGlyph(
         char,
