@@ -178,7 +178,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     };
   }, [lyricLines]);
 
-  const marginY = 18;
+  const marginY = 0;
 
   // Physics Hook
   const { anchorRef, handlers, linesState, modeRef, updatePhysics } = useLyricsPhysics(
@@ -227,7 +227,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
 
   const pick = (clientY: number, rect: DOMRect) => {
     const hitY = clientY - rect.top;
-    const focal = rect.height * 0.35;
+    const focal = rect.height * 0.25;
 
     for (let i = 0; i < lyricLines.length; i++) {
       if (lyrics[i]?.isMetadata) continue;
@@ -468,7 +468,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     const clear = modeRef.current !== "auto" || hoverRef.current;
 
     const paddingX = isMobile ? 24 : 56;
-    const focalPointOffset = height * 0.35;
+    const focalPointOffset = height * 0.25;
 
     const queue: Array<{
       index: number;
@@ -648,7 +648,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     const rect = e.currentTarget.getBoundingClientRect();
     const clickY = e.clientY - rect.top;
     const height = rect.height;
-    const focalPointOffset = height * 0.35;
+    const focalPointOffset = height * 0.25;
 
     let matched = false;
     for (let i = 0; i < lyricLines.length; i++) {

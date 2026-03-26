@@ -28,7 +28,7 @@ export interface LinePhysicsState {
   scale: SpringState;
 }
 
-const FOCAL_RATIO = 0.35;
+const FOCAL_RATIO = 0.25;
 const CASCADE_STEP_MS = 50;
 const CASCADE_DECAY = 1.05;
 const CASCADE_CLEAR_MS = 400;
