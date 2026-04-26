@@ -40,12 +40,10 @@ interface Dict {
     next: string;
     queue: string;
     speed: string;
-    tone: string;
-    vinylMode: string;
-    digital: string;
-    vinyl: string;
-    digitalShort: string;
-    vinylShort: string;
+    nightcore: string;
+    original: string;
+    nightcoreShort: string;
+    originalShort: string;
   };
   import: {
     title: string;
@@ -147,12 +145,10 @@ export const dicts: Record<Lang, Dict> = {
       next: "Next",
       queue: "Queue",
       speed: "Speed",
-      tone: "Tone Preserved",
-      vinylMode: "Vinyl Mode",
-      digital: "Digital",
-      vinyl: "Vinyl",
-      digitalShort: "Dig",
-      vinylShort: "Vin",
+      nightcore: "Nightcore",
+      original: "Original",
+      nightcoreShort: "NC",
+      originalShort: "ORG",
     },
     import: {
       title: "Import Music",
@@ -253,12 +249,10 @@ export const dicts: Record<Lang, Dict> = {
       next: "下一首",
       queue: "队列",
       speed: "速度",
-      tone: "保留音调",
-      vinylMode: "黑胶模式",
-      digital: "数字",
-      vinyl: "黑胶",
-      digitalShort: "数",
-      vinylShort: "胶",
+      nightcore: "夜核",
+      original: "原调",
+      nightcoreShort: "夜核",
+      originalShort: "原调",
     },
     import: {
       title: "导入音乐",

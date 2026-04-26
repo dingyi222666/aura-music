@@ -719,19 +719,19 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({
       </div>
 
       {/* Toggle Preserves Pitch */}
-      <div className="flex flex-col items-center justify-end gap-2 w-12 pb-6">
+      <div className="flex flex-col items-center justify-end gap-2 w-[68px] pb-6">
         <button
           onClick={onTogglePreservesPitch}
-          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-200 ${preservesPitch ? "bg-white/20 text-white" : "bg-white text-black"
+          className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors duration-200 ${preservesPitch ? "bg-white/20 text-white" : "bg-white text-black"
             }`}
-          title={preservesPitch ? dict.controls.tone : dict.controls.vinylMode}
+          title={preservesPitch ? dict.controls.original : dict.controls.nightcore}
         >
-          <span className="text-xs font-bold">
-            {preservesPitch ? dict.controls.digitalShort : dict.controls.vinylShort}
+          <span className="text-[11px] font-bold tracking-[0.04em]">
+            {preservesPitch ? dict.controls.originalShort : dict.controls.nightcoreShort}
           </span>
         </button>
         <span className="text-[10px] font-medium text-white/60 text-center leading-tight">
-          {preservesPitch ? dict.controls.digital : dict.controls.vinyl}
+          {preservesPitch ? dict.controls.original : dict.controls.nightcore}
         </span>
       </div>
     </animated.div>

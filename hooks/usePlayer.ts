@@ -63,10 +63,28 @@ export const usePlayer = ({
   const [duration, setDuration] = useState(0);
   const [playMode, setPlayMode] = useState<PlayMode>(savedRef.current.playMode);
   const [matchStatus, setMatchStatus] = useState<MatchStatus>("idle");
+  const [speed, setSpeed] = useState(1);
+  const [preservesPitch, setPreservesPitch] = useState(true);
+  const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string | null>(null);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [bufferProgress, setBufferProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const isSeekingRef = useRef(false);
   const poolRef = useRef<string[]>([]);
   const pastRef = useRef<string[]>([]);
+
+  const applyAudio = useCallback(() => {
+    const audio = audioRef.current as (HTMLAudioElement & {
+      webkitPreservesPitch?: boolean;
+      mozPreservesPitch?: boolean;
+    }) | null;
+    if (!audio) return;
+
+    audio.preservesPitch = preservesPitch;
+    audio.webkitPreservesPitch = preservesPitch;
+    audio.mozPreservesPitch = preservesPitch;
+    audio.playbackRate = speed;
+  }, [preservesPitch, speed]);
 
   const pauseAndResetCurrentAudio = useCallback(() => {
     if (!audioRef.current) return;
@@ -152,18 +170,20 @@ export const usePlayer = ({
         audioRef.current.currentTime = 0;
         setCurrentTime(0);
       }
+      applyAudio();
       audioRef.current.play().catch((err) => console.error("Play failed", err));
       setPlayState(PlayState.PLAYING);
     }
-  }, [playState]);
+  }, [applyAudio, playState]);
 
   const play = useCallback(() => {
     if (!audioRef.current) return;
+    applyAudio();
     audioRef.current
       .play()
       .catch((err) => console.error("Play failed", err));
     setPlayState(PlayState.PLAYING);
-  }, []);
+  }, [applyAudio]);
 
   const pause = useCallback(() => {
     if (!audioRef.current) return;
@@ -189,6 +209,7 @@ export const usePlayer = ({
         setCurrentTime(time);
         isSeekingRef.current = false;
         if (playImmediately) {
+          applyAudio();
           audioRef.current
             .play()
             .catch((err) => console.error("Play failed", err));
@@ -196,7 +217,7 @@ export const usePlayer = ({
         }
       }
     },
-    [],
+    [applyAudio],
   );
 
   const handleTimeUpdate = useCallback(() => {
@@ -207,6 +228,7 @@ export const usePlayer = ({
 
   const handleLoadedMetadata = useCallback(() => {
     if (!audioRef.current) return;
+    applyAudio();
     const value = audioRef.current.duration;
     setDuration(Number.isFinite(value) ? value : 0);
     if (playState === PlayState.PLAYING) {
@@ -214,7 +236,7 @@ export const usePlayer = ({
         .play()
         .catch((err) => console.error("Auto-play failed", err));
     }
-  }, [playState]);
+  }, [applyAudio, playState]);
 
   useEffect(() => {
     isSeekingRef.current = false;
@@ -682,12 +704,6 @@ export const usePlayer = ({
     }
   }, [queue, currentIndex, setIndex]);
 
-  const [speed, setSpeed] = useState(1);
-  const [preservesPitch, setPreservesPitch] = useState(true);
-  const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string | null>(null);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [bufferProgress, setBufferProgress] = useState(0);
-
   const handleSetSpeed = useCallback((newSpeed: number) => {
     setSpeed(newSpeed);
   }, []);
@@ -696,13 +712,10 @@ export const usePlayer = ({
     setPreservesPitch((prev) => !prev);
   }, []);
 
-  // Ensure playback rate is applied when song changes or play state changes
+  // Re-apply playback settings whenever state or source changes.
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.preservesPitch = preservesPitch;
-      audioRef.current.playbackRate = speed;
-    }
-  }, [currentSong, playState, speed, preservesPitch]);
+    applyAudio();
+  }, [applyAudio, currentSong?.id, playState, resolvedAudioSrc]);
 
   useEffect(() => {
     let canceled = false;
