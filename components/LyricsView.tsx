@@ -455,12 +455,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     const activeSet = new Set(active.activeIndexes);
 
     const currentLineHeights = lyricLines.map((line) => line.getCurrentHeight(visualTime));
-    const layoutHeights = lyricLines.map((line, index) => {
-      if (line.isInterlude() || line.isBackgroundLine()) {
-        return currentLineHeights[index];
-      }
-      return line.getTargetHeight(visualTime);
-    });
+    const layoutHeights = lyricLines.map((line) => line.getTargetHeight(visualTime));
 
     updatePhysics(dt, layoutHeights, visualTime);
 

@@ -21,7 +21,7 @@ const EMPHASIS_TRAIL = 1.2;
 const EMPHASIS_SPLIT = 0.5;
 const BG_LEAD = 0.9;
 const BG_TRAIL = 0.45;
-const BG_FONT_SCALE = 0.76;
+const BG_FONT_SCALE = 0.5;
 export const BG_ACTIVE_ALPHA = 0.68;
 export const BG_PAST_ALPHA = BG_ACTIVE_ALPHA;
 const BG_FUTURE_ALPHA = 0.42;
@@ -1131,7 +1131,19 @@ export class LyricLine implements ILyricLine {
     this.mainHeight = mainHeight;
 
     const baseSize = (this.isMobile ? 32 : 40) * fontScale;
-    const paddingY = this.isMobile ? 18 : 24;
+    const top = this.lyricLine.isBackground
+      ? this.isMobile
+        ? 10
+        : 12
+      : this.isMobile
+        ? 18
+        : 24;
+    const bottom = this.lyricLine.isBackground
+      ? this.isMobile
+        ? 4
+        : 6
+      : top;
+    const gap = mainHeight * (this.lyricLine.isBackground ? 0.18 : WRAPPED_LINE_GAP_RATIO);
     const paddingX = this.isMobile ? 24 : 56;
     // Duet lines get reduced max width (~65% of container)
     const duetRatio = this.lyricLine.isDuet ? (this.isMobile ? 0.88 : 0.78) : 1;
@@ -1161,9 +1173,9 @@ export class LyricLine implements ILyricLine {
       maxWidth,
       baseSize,
       mainHeight,
-      paddingY,
+      paddingY: top,
       mainFont: main,
-      wrapLineGap: mainHeight * WRAPPED_LINE_GAP_RATIO,
+      wrapLineGap: gap,
     });
 
     let blockHeight = lineHeight;
@@ -1205,7 +1217,7 @@ export class LyricLine implements ILyricLine {
       effectiveTextWidth,
     );
 
-    blockHeight += paddingY;
+    blockHeight += bottom;
     this._height = blockHeight;
 
     this.layout = {
