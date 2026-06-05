@@ -319,7 +319,7 @@ export const SearchIcon: React.FC<IconProps> = ({ className }) => (
   </svg>
 );
 
-export const CloudDownloadIcon: React.FC<IconProps> = ({
+export const LocalMusicIcon: React.FC<IconProps> = ({
   className = "",
   ...props
 }) => (
@@ -331,17 +331,12 @@ export const CloudDownloadIcon: React.FC<IconProps> = ({
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
-    className={`cloud-download-icon ${className}`}
+    className={className}
     {...props}
   >
-    {/* 云朵轮廓：底部留出开口以容纳箭头，视觉上更透气 */}
-    <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29" />
-
-    {/* 垂直向下的下载箭头主体 */}
-    <path d="M12 12v9" />
-
-    {/* 箭头尖端 */}
-    <path d="m8 17 4 4 4-4" />
+    <path d="M10.5 21.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v3" />
+    <circle cx="16" cy="18" r="2" />
+    <path d="M18 18V12h4v3" />
   </svg>
 );
 

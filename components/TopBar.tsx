@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { useI18n } from "../hooks/useI18n";
-import { AuraLogo, SearchIcon, CloudDownloadIcon, InfoIcon, FullscreenIcon } from "./Icons";
+import { AuraLogo, SearchIcon, LocalMusicIcon, InfoIcon, FullscreenIcon } from "./Icons";
 import AboutDialog from "./AboutDialog";
 
 interface TopBarProps {
@@ -90,73 +90,71 @@ const TopBar: React.FC<TopBarProps> = ({
     e.target.value = "";
   };
 
-  const baseTransitionClasses = "transition-all duration-500 ease-out";
-  const mobileActiveClasses = isTopBarActive
+  const baseTransitionClasses = "transition-all duration-300 ease-out";
+  const childClasses = isTopBarActive
     ? "opacity-100 translate-y-0 pointer-events-auto"
-    : "opacity-0 -translate-y-2 pointer-events-none";
-  const hoverSupportClasses = "group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto";
+    : "opacity-0 -translate-y-3 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto";
+  const bgClasses = isTopBarActive
+    ? "opacity-100"
+    : "opacity-0 group-hover:opacity-100";
 
   return (
     <div
       className="fixed top-0 left-0 w-full h-14 z-[60] group"
       onPointerDownCapture={handlePointerDownCapture}
     >
-      {/* Blur Background Layer (Animate in) */}
-      <div
-        className={`absolute inset-0 bg-white/5 backdrop-blur-2xl border-b border-white/10 transition-all duration-500 ${isTopBarActive ? "opacity-100" : "opacity-0"} group-hover:opacity-100`}
-      ></div>
+      {/* Blur Background Layer */}
+      <div className={`absolute inset-0 bg-black/15 dark:bg-black/20 backdrop-blur-xl border-b border-white/5 ${baseTransitionClasses} ${bgClasses}`}></div>
 
-      {/* Content (Animate in) */}
-      <div className="relative z-10 w-full h-full px-6 flex justify-between items-center pointer-events-auto">
+      {/* Content */}
+      <div className="relative z-10 w-full h-full px-6 flex justify-between items-center pointer-events-none">
         {/* Logo / Title */}
-        <div className={`flex items-center gap-3 ${baseTransitionClasses} ${mobileActiveClasses} ${hoverSupportClasses}`}>
-          <div className="w-9 h-9 rounded-[10px] shadow-lg shadow-purple-500/20 overflow-hidden">
+        <div className={`flex items-center gap-3 ${baseTransitionClasses} ${childClasses}`}>
+          <div className="w-9 h-9 rounded-[10px] overflow-hidden shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-white/10 flex-shrink-0">
             <AuraLogo className="w-full h-full" />
           </div>
-          <h1 className="text-white/90 font-bold tracking-wider text-sm uppercase hidden sm:block drop-shadow-md">
+          <span className="text-white/90 font-semibold tracking-tight text-[15px] hidden sm:block">
             {dict.app.name}
-          </h1>
+          </span>
         </div>
 
-        {/* Actions (iOS 18 Style Glass Buttons) */}
-        <div
-          className={`flex gap-3 ${baseTransitionClasses} delay-75 ${mobileActiveClasses} ${hoverSupportClasses}`}
-        >
+        {/* Actions */}
+        <div className={`flex gap-2 ${baseTransitionClasses} ${childClasses}`}>
           {/* Search Button */}
           <button
             onClick={onSearchClick}
-            className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-all shadow-sm"
+            className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-95 text-white/75 hover:text-white transition-all duration-200 flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.05)] pointer-events-auto"
             title={dict.top.search}
           >
-            <SearchIcon className="w-5 h-5" />
+            <SearchIcon className="w-[18px] h-[18px]" />
           </button>
 
           {/* Import Button */}
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
-            className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-95 text-white/75 hover:text-white transition-all duration-200 flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.05)] disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed pointer-events-auto"
             title={dict.top.importLocal}
           >
-            <CloudDownloadIcon className="w-5 h-5" />
+            <LocalMusicIcon className="w-[18px] h-[18px]" />
           </button>
 
           {/* About Button */}
           <button
             onClick={() => setIsAboutOpen(true)}
-            className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-all shadow-sm"
+            className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-95 text-white/75 hover:text-white transition-all duration-200 flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.05)] pointer-events-auto"
             title={dict.top.about}
           >
-            <InfoIcon className="w-5 h-5" />
+            <InfoIcon className="w-[18px] h-[18px]" />
           </button>
 
           {/* Fullscreen Button */}
           <button
             onClick={toggleFullscreen}
-            className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-all shadow-sm"
+            className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-95 text-white/75 hover:text-white transition-all duration-200 flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.05)] pointer-events-auto"
             title={isFullscreen ? dict.top.exitFullscreen : dict.top.enterFullscreen}
           >
-            <FullscreenIcon className="w-5 h-5" isFullscreen={isFullscreen} />
+            <FullscreenIcon className="w-[18px] h-[18px]" isFullscreen={isFullscreen} />
           </button>
 
           <input

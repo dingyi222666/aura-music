@@ -19,4 +19,7 @@ export interface ILyricLine {
   isInterlude(): boolean;
   getAlignment(): "left" | "right" | undefined;
   isBackgroundLine(): boolean;
+  // Absolute time at which this line's word-emphasis glow has fully settled.
+  // -Infinity when the line has no emphasized words.
+  getEmphasisEnd(): number;
 }

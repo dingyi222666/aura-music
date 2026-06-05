@@ -327,4 +327,8 @@ export class InterludeDots implements ILyricLine {
     public isBackgroundLine() {
         return false;
     }
+
+    public getEmphasisEnd() {
+        return -Infinity;
+    }
 }

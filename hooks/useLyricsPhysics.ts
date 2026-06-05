@@ -28,10 +28,17 @@ export interface LinePhysicsState {
   scale: SpringState;
 }
 
-const FOCAL_RATIO = 0.25;
-const CASCADE_STEP_MS = 50;
-const CASCADE_DECAY = 1.05;
-const CASCADE_CLEAR_MS = 400;
+// --- Apple-Music-style elastic auto-scroll ---
+// The camera (scrollY) rides a single, slightly under-damped spring so the
+// whole stack moves as one body. Every upcoming line then reads that camera
+// from a little further in the past the deeper it sits below the active line.
+// That per-line time-lag is what makes the gaps fan open while the camera
+// speeds up and spring shut — with the camera's own overshoot — once it
+// settles. The old approach instead froze each row until its turn, which read
+// as the lines releasing "one by one" with leftover seams between them.
+const TRAIL_STEP_MS = 30; // added lag per line below the active line
+const TRAIL_MAX_MS = 165; // ceiling so far rows don't lag indefinitely
+const CAMERA_HISTORY_MS = TRAIL_MAX_MS + 120; // camera ring-buffer retention
 
 const getLinePosSpring = (relativeIndex: number): SpringConfig => {
   if (relativeIndex <= 0) {
@@ -97,6 +104,24 @@ const REBOUND_SPRING: SpringConfig = {
   precision: 0.01,
 };
 
+// Auto-scroll camera glide: a snappy lead with a small, deliberate overshoot —
+// that overshoot is exactly what the trailing rows replay as the rebound.
+const AUTO_CAMERA_SPRING: SpringConfig = {
+  mass: 1,
+  stiffness: 190,
+  damping: 18,
+  precision: 0.05,
+};
+
+// Auto-scroll line tracking: stiff and clean so each row hugs its (time-lagged)
+// camera target without adding a second, competing bounce of its own.
+const AUTO_LINE_SPRING: SpringConfig = {
+  mass: 0.8,
+  stiffness: 320,
+  damping: 34,
+  precision: 0.1,
+};
+
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
@@ -130,31 +155,34 @@ interface ScrollSample {
   time: number;
 }
 
-interface CascadeState {
-  anchor: number;
-  started: number;
-  expires: number;
-  delays: Map<number, number>;
+interface CameraSample {
+  t: number;
+  y: number;
 }
 
-const blankCascade = (): CascadeState => ({
-  anchor: -1,
-  started: 0,
-  expires: 0,
-  delays: new Map(),
-});
-
-export const lineTargetOf = (
-  nextTarget: number,
-  waiting: boolean,
-  prevTarget: number,
-) => {
-  if (waiting) {
-    return prevTarget;
+// Read the camera's past position with linear interpolation. Timestamps outside
+// the buffer clamp to the oldest/newest sample so a row never reads garbage.
+const sampleHistory = (buf: CameraSample[], t: number, fallback: number) => {
+  const n = buf.length;
+  if (n === 0) return fallback;
+  if (t >= buf[n - 1].t) return buf[n - 1].y;
+  if (t <= buf[0].t) return buf[0].y;
+  for (let i = n - 1; i > 0; i--) {
+    const a = buf[i - 1];
+    if (a.t <= t) {
+      const b = buf[i];
+      const span = b.t - a.t;
+      if (span <= 0) return b.y;
+      return a.y + (b.y - a.y) * ((t - a.t) / span);
+    }
   }
-
-  return nextTarget;
+  return buf[0].y;
 };
+
+const trailLagOf = (distanceBelow: number) =>
+  distanceBelow <= 0
+    ? 0
+    : Math.min(TRAIL_MAX_MS, distanceBelow * TRAIL_STEP_MS);
 
 export const isJumping = (
   anchorJump: number,
@@ -166,49 +194,6 @@ export const isJumping = (
   if (anchorJump > 5) return true;
   if (!Number.isFinite(audioTime)) return false;
   return Math.abs(audioTime - time) > SEEK_GAP;
-};
-
-const cascadeOf = (
-  lyrics: LyricLine[],
-  anchors: number[],
-  positions: number[],
-  heights: number[],
-  scrollY: number,
-  view: number,
-  anchor: number,
-) => {
-  const top = scrollY - view * FOCAL_RATIO;
-  const bottom = top + view;
-  const delays = new Map<number, number>();
-  let delay = 0;
-  let step = CASCADE_STEP_MS;
-
-  positions
-    .map((y, index) => ({ index, y }))
-    .filter(({ index, y }) => {
-      const h = heights[index] ?? 0;
-      if (h <= 0.001) {
-        return false;
-      }
-
-      return y + h >= top && y <= bottom;
-    })
-    .sort((a, b) => a.y - b.y)
-    .forEach(({ index }) => {
-      if (lyrics[index]?.isBackground && anchors[index] !== index) {
-        delays.set(index, delays.get(anchors[index]) ?? delay);
-        return;
-      }
-
-      delays.set(index, delay);
-      delay += step;
-
-      if (index >= anchor) {
-        step /= CASCADE_DECAY;
-      }
-    });
-
-  return delays;
 };
 
 const rubberBand = (overdrag: number, dimension: number) => {
@@ -565,7 +550,7 @@ export const useLyricsPhysics = ({
   // Main Scroll Spring (The "Camera")
   const springSystem = useRef(new SpringSystem({ scrollY: 0 }));
   const scrollLimitsRef = useRef({ min: 0, max: 0 });
-  const cascadeRef = useRef<CascadeState>(blankCascade());
+  const cameraHistoryRef = useRef<CameraSample[]>([]);
   const anchorRef = useRef(-1);
   const modeRef = useRef<ScrollMode>("auto");
 
@@ -673,7 +658,7 @@ export const useLyricsPhysics = ({
     modeRef.current = "auto";
     scrollState.current.touchVelocity = 0;
     clearSamples();
-    cascadeRef.current = blankCascade();
+    cameraHistoryRef.current = [];
     const currentScroll = springSystem.current.getCurrent("scrollY");
     const clamped = clampScrollValue(currentScroll, false);
     scrollState.current.targetScrollY = clamped;
@@ -700,7 +685,7 @@ export const useLyricsPhysics = ({
     scrollState.current.targetScrollY = 0;
     scrollState.current.touchVelocity = 0;
     clearSamples();
-    cascadeRef.current = blankCascade();
+    cameraHistoryRef.current = [];
     anchorRef.current = -1;
     prevAnchorRef.current = -1;
     markScrollIdle();
@@ -842,7 +827,14 @@ export const useLyricsPhysics = ({
         const autoTarget = clampScrollValue(computeActiveScrollTarget(), false);
         sState.mode = "auto";
         sState.targetScrollY = autoTarget;
-        system.setValue("scrollY", autoTarget);
+        if (jumping) {
+          // A seek shouldn't swoop the camera across the whole song — land it
+          // immediately and let the rows fast-track in via SEEK_POS_SPRING.
+          system.setValue("scrollY", autoTarget);
+        } else {
+          system.setTarget("scrollY", autoTarget, AUTO_CAMERA_SPRING);
+          spring = true;
+        }
       }
 
       modeRef.current = sState.mode;
@@ -877,57 +869,42 @@ export const useLyricsPhysics = ({
         sState.mode === "rebound" ||
         (sState.mode === "manual" && hold);
 
-      const shifted = prevAnchorIndex !== -1 && anchor !== prevAnchorIndex;
-      if (shouldSnap || isUserInteracting || anchor < 0 || jumping) {
-        if (cascadeRef.current.delays.size > 0) {
-          cascadeRef.current = blankCascade();
+      // Keep a short rolling history of the camera position. During auto-scroll
+      // each upcoming row samples it from a few ms in the past, so the stack
+      // fans open and springs shut as one body instead of releasing row by row.
+      // Any non-auto state (seek, drag, momentum, big snap) collapses the
+      // history so rows track the camera 1:1 with no lag.
+      const trailing =
+        sState.mode === "auto" && !jumping && !shouldSnap && anchor >= 0;
+      const history = cameraHistoryRef.current;
+      if (!trailing) {
+        history.length = 0;
+      } else {
+        history.push({ t: now, y: currentGlobalScrollY });
+        while (history.length > 1 && now - history[0].t > CAMERA_HISTORY_MS) {
+          history.shift();
         }
-      } else if (shifted) {
-        const delays = cascadeOf(
-          lyrics,
-          anchors,
-          currentPositions,
-          activeHeights,
-          currentGlobalScrollY,
-          containerHeight,
-          anchor,
-        );
-        const tail = Array.from(delays.values()).reduce(
-          (max, value) => Math.max(max, value),
-          0,
-        );
-        cascadeRef.current = {
-          anchor,
-          started: now,
-          expires: now + Math.max(CASCADE_CLEAR_MS, tail + 260),
-          delays,
-        };
-      } else if (
-        cascadeRef.current.expires > 0 &&
-        now >= cascadeRef.current.expires
-      ) {
-        cascadeRef.current = blankCascade();
       }
 
-      const elapsed = now - cascadeRef.current.started;
+      const baseAnchor = anchor === -1 ? 0 : anchor;
 
       linesState.current.forEach((state, index) => {
-        const relativeIndex = index - (anchor === -1 ? 0 : anchor);
+        const relativeIndex = index - baseAnchor;
         const targetPos = currentPositions[index];
-        const delay = cascadeRef.current.delays.get(index) ?? -1;
-        const waiting = delay > elapsed;
 
         if (typeof targetPos === "number") {
-          const nextTarget = -currentGlobalScrollY + targetPos;
-          if (jumping) {
-            state.posY.target = nextTarget;
-          } else {
-            state.posY.target = lineTargetOf(
-              nextTarget,
-              waiting,
-              state.posY.target,
-            );
+          let cameraY = currentGlobalScrollY;
+          if (trailing) {
+            // Background harmonies trail with their host line, not their own row.
+            const ref = lyrics[index]?.isBackground
+              ? anchors[index] ?? index
+              : index;
+            const lag = trailLagOf(ref - baseAnchor);
+            if (lag > 0) {
+              cameraY = sampleHistory(history, now - lag, currentGlobalScrollY);
+            }
           }
+          state.posY.target = -cameraY + targetPos;
         }
 
         const displacement = state.posY.current - state.posY.target;
@@ -946,6 +923,8 @@ export const useLyricsPhysics = ({
               ? getDragPosSpring(relativeIndex)
               : isUserInteracting
                 ? getHoldPosSpring(relativeIndex)
+              : trailing
+                ? AUTO_LINE_SPRING
                 : getLinePosSpring(relativeIndex);
           updateSpring(
             state.posY,

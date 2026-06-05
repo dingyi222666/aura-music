@@ -154,6 +154,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     setLyricLines(lines);
     // Clear stale animation states when lyrics are re-measured
     lineAnimStatesRef.current.clear();
+    lineOpacityRef.current.clear();
   }, [lyrics, containerWidth, isMobile]);
 
   // Calculate layout properties for physics
@@ -220,6 +221,9 @@ const LyricsView: React.FC<LyricsViewProps> = ({
 
   // Per-line animation state (hover fade, press scale, blur transition)
   const lineAnimStatesRef = useRef<Map<number, LineAnimationState>>(new Map());
+  // Per-line eased opacity so brightness transitions smoothly between the
+  // active and inactive states instead of stepping with the gap.
+  const lineOpacityRef = useRef<Map<number, number>>(new Map());
   // Track which line index is currently being pressed
   const pressedLineRef = useRef<number | null>(null);
   // Track pointer-down state for press animation
@@ -475,6 +479,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       scale: number;
       pressScale: number;
       isActive: boolean;
+      drawActive: boolean;
       isHovering: boolean;
       hoverProgress: number;
       isPressed: boolean;
@@ -506,6 +511,13 @@ const LyricsView: React.FC<LyricsViewProps> = ({
       const hover = pressedLineRef.current ?? mobileHoverIndex;
 
       const isActive = activeSet.has(index);
+      // Keep the line on its glow path until the emphasis has fully settled,
+      // even after the next line takes over — otherwise the glow pops off
+      // instead of easing back when lines land close together.
+      const drawActive =
+        isActive ||
+        (visualTime >= lyrics[index].time &&
+          visualTime < line.getEmphasisEnd());
       const scale = physics.scale.current;
       const isHovering = isMobile
         ? hover === index
@@ -546,10 +558,19 @@ const LyricsView: React.FC<LyricsViewProps> = ({
         targetBlur,
       );
 
+      // Ease the base opacity so the brightness glides between active and
+      // inactive instead of snapping when the line hands off.
+      const prevOpacity = lineOpacityRef.current.get(index);
+      const easedOpacity =
+        prevOpacity === undefined
+          ? targetOpacity
+          : prevOpacity + (targetOpacity - prevOpacity) * (1 - Math.exp(-dt / 0.16));
+      lineOpacityRef.current.set(index, easedOpacity);
+
       // Apply hover influence on opacity (interpolated smoothly)
-      let opacity = targetOpacity;
+      let opacity = easedOpacity;
       if (hoverProgress > 0) {
-        opacity = targetOpacity + (Math.max(0.8, targetOpacity) - targetOpacity) * hoverProgress;
+        opacity = easedOpacity + (Math.max(0.8, easedOpacity) - easedOpacity) * hoverProgress;
       }
 
       // Blur: use the smoothly interpolated value, reduced by hover progress
@@ -565,6 +586,7 @@ const LyricsView: React.FC<LyricsViewProps> = ({
         scale,
         pressScale,
         isActive,
+        drawActive,
         isHovering,
         hoverProgress,
         isPressed,
@@ -582,10 +604,10 @@ const LyricsView: React.FC<LyricsViewProps> = ({
         return a.index - b.index;
       })
       .forEach((item) => {
-        const useVisualTime = item.isActive || item.line.isBackgroundLine();
+        const useVisualTime = item.drawActive || item.line.isBackgroundLine();
         item.line.draw(
           useVisualTime ? visualTime : currentTime,
-          item.isActive,
+          item.drawActive,
           item.isHovering,
           item.hoverProgress,
         );

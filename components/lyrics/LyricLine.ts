@@ -28,6 +28,9 @@ const BG_FUTURE_ALPHA = 0.42;
 const BG_IDLE_ALPHA = 0.24;
 const BG_TRANS_ALPHA = 0.74;
 const TRANS_ALPHA = 0.8;
+// Time constant for easing a line's colour from lit (white) back to idle when
+// it stops being active, so the brightness recovers instead of snapping.
+const ACTIVE_FADE_TAU = 0.16;
 const BG_SHOW_SPRING: SpringConfig = {
   mass: 1.42,
   stiffness: 56,
@@ -473,6 +476,13 @@ export class LyricLine implements ILyricLine {
   private bgTime = Number.NaN;
   private bgShow = 0;
   private mainHeight = 0;
+  // Absolute time when the last emphasized word's glow has fully settled, so the
+  // line can keep rendering its glow recovery even after the next line starts.
+  private emphasisEnd = -Infinity;
+  // Eased 1→0 colour level: 1 while active/glowing, decays to 0 on deactivation
+  // so the line's fill fades from white back to idle instead of snapping.
+  private activeLevel = 0;
+  private activeStamp = -1;
 
   private getBackgroundBounds() {
     const start = this.lyricLine.time;
@@ -692,7 +702,10 @@ export class LyricLine implements ILyricLine {
         }
       });
     } else {
-      const baseOpacity = isBackground ? BG_IDLE_ALPHA : 0.3;
+      const idle = isBackground ? BG_IDLE_ALPHA : 0.3;
+      // Fade from the lit (white) colour back to idle instead of snapping when
+      // the line just went inactive.
+      const baseOpacity = idle + (1 - idle) * clamp01(this.activeLevel);
       this.ctx.fillStyle = `rgba(255, 255, 255, ${baseOpacity})`;
       this.layout.words.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
     }
@@ -1241,6 +1254,8 @@ export class LyricLine implements ILyricLine {
       translationWidth,
     };
 
+    this.emphasisEnd = this.computeEmphasisEnd();
+
     // Store logical dimensions
 
     this.logicalWidth = containerWidth;
@@ -1264,6 +1279,35 @@ export class LyricLine implements ILyricLine {
     return this.layout?.textWidth || 0;
   }
 
+  // Latest absolute time any emphasized word is still animating its glow.
+  // Grouped by row to match drawFullLine's trailing-word detection exactly.
+  private computeEmphasisEnd(): number {
+    if (!this.layout) return -Infinity;
+
+    const rows = new Map<number, WordLayout[]>();
+    this.layout.words.forEach((word) => {
+      const key = Math.round(word.y);
+      const list = rows.get(key);
+      if (list) list.push(word);
+      else rows.set(key, [word]);
+    });
+
+    let end = -Infinity;
+    rows.forEach((rowWords) => {
+      rowWords.forEach((word, index) => {
+        if (!shouldEmphasizeWord(word)) return;
+        const tail =
+          word.startTime + getWordAnimationDuration(word, rowWords, index);
+        if (tail > end) end = tail;
+      });
+    });
+    return end;
+  }
+
+  public getEmphasisEnd() {
+    return this.emphasisEnd;
+  }
+
   public draw(
     currentTime: number,
     isActive: boolean,
@@ -1271,6 +1315,22 @@ export class LyricLine implements ILyricLine {
     hoverProgress: number = isHovered ? 1 : 0,
   ) {
     if (!this.layout) return;
+
+    // Ease the colour level: snap up while active/glowing, decay once it ends so
+    // the line fades white→idle. Updated before any early-out so the timing and
+    // redraw gating stay consistent.
+    const fadeNow = performance.now();
+    const fadeDt =
+      this.activeStamp === -1
+        ? 0.016
+        : Math.min(0.1, Math.max(0.001, (fadeNow - this.activeStamp) / 1000));
+    this.activeStamp = fadeNow;
+    if (isActive) {
+      this.activeLevel = 1;
+    } else if (this.activeLevel > 0.001) {
+      this.activeLevel *= Math.exp(-fadeDt / ACTIVE_FADE_TAU);
+      if (this.activeLevel <= 0.001) this.activeLevel = 0;
+    }
 
     const isBackground = Boolean(this.lyricLine.isBackground);
     const bgShow = isBackground ? this.getBackgroundShow(currentTime) : 0;
@@ -1286,7 +1346,8 @@ export class LyricLine implements ILyricLine {
       !this.isDirty &&
       !this.lastIsActive &&
       this.lastIsHovered === isHovered &&
-      !hoverAnimating;
+      !hoverAnimating &&
+      this.activeLevel <= 0.001;
     if (stateUnchanged) return;
 
     const fontScale = this.lyricLine.isBackground ? BG_FONT_SCALE : 1;
