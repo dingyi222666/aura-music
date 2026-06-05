@@ -380,7 +380,12 @@ const freeFbo = (fbo: FBO | null) => {
   gl.deleteTexture(fbo.tex);
 };
 
-const makeTex = (source: TexImageSource, w: number, h: number, cover: boolean): Tex | null => {
+const makeTex = (
+  source: TexImageSource,
+  w: number,
+  h: number,
+  cover: boolean,
+): Tex | null => {
   if (!gl) return null;
   const tex = gl.createTexture();
   if (!tex) return null;
@@ -509,14 +514,17 @@ const generateGradientTex = (colors: string[]): Tex | null => {
   const palette = colors.length > 0 ? colors : defaultColors;
   const bg = ctx.createLinearGradient(0, 0, size, size);
   palette.forEach((color, idx) => {
-    bg.addColorStop(palette.length === 1 ? 0 : idx / (palette.length - 1), color);
+    bg.addColorStop(
+      palette.length === 1 ? 0 : idx / (palette.length - 1),
+      color,
+    );
   });
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, size, size);
 
   palette.forEach((color, idx) => {
-    const x = (0.2 + 0.6 * ((idx * 37) % 100) / 100) * size;
-    const y = (0.2 + 0.6 * ((idx * 61) % 100) / 100) * size;
+    const x = (0.2 + (0.6 * ((idx * 37) % 100)) / 100) * size;
+    const y = (0.2 + (0.6 * ((idx * 61) % 100)) / 100) * size;
     const rg = ctx.createRadialGradient(x, y, 0, x, y, size * 0.65);
     rg.addColorStop(0, color);
     rg.addColorStop(1, "rgba(0,0,0,0)");

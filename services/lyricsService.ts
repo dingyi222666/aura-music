@@ -1,11 +1,9 @@
 import { fetchViaProxy } from "./utils";
 import { isMetadataLine } from "./lyrics/types";
 
-const LYRIC_API_BASE = "https://zm.wwoyun.cn";
 const METING_API = "https://api.qijieya.cn/meting/";
-const NETEASE_SEARCH_API = "https://zm.wwoyun.cn/cloudsearch";
-const NETEASE_API_BASE = "http://music.163.com/api";
-const NETEASECLOUD_API_BASE = "https://zm.wwoyun.cn";
+const NETEASE_SEARCH_API = "https://fnos.allycheckout.com/cloudsearch";
+const NETEASECLOUD_API_BASE = "https://fnos.allycheckout.com";
 const TTML_DB_BASE = "https://amll-ttml-db.stevexmh.net";
 
 const TIMESTAMP_REGEX = /^\[(\d{2}):(\d{2})(?:[\.:](\d{2,3}))?\](.*)$/;
@@ -155,7 +153,9 @@ const TTML_META_LABELS: Record<string, string> = {
 const TTML_AUTHOR_KEY = "ttmlAuthorGithubLogin";
 const TTML_SOURCE_TEXT = "TTML 歌词来源: AMLL TTML Database";
 const TTML_META_KEYS = Object.keys(TTML_META_LABELS);
-const TTML_DISPLAY_KEYS = TTML_META_KEYS.filter((key) => key !== TTML_AUTHOR_KEY);
+const TTML_DISPLAY_KEYS = TTML_META_KEYS.filter(
+  (key) => key !== TTML_AUTHOR_KEY,
+);
 const HAN_REGEX = /\p{Script=Han}/u;
 const KANA_REGEX = /\p{Script=Hiragana}|\p{Script=Katakana}/u;
 const HANGUL_REGEX = /\p{Script=Hangul}/u;
