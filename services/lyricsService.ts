@@ -2,8 +2,8 @@ import { fetchViaProxy } from "./utils";
 import { isMetadataLine } from "./lyrics/types";
 
 const METING_API = "https://api.qijieya.cn/meting/";
-const NETEASE_SEARCH_API = "https://fnos.allycheckout.com/cloudsearch";
-const NETEASECLOUD_API_BASE = "https://fnos.allycheckout.com";
+const NETEASE_SEARCH_API = "https://api.jimsdeng.eu.org/cloudsearch";
+const NETEASECLOUD_API_BASE = "https://api.jimsdeng.eu.org";
 const TTML_DB_BASE = "https://amll-ttml-db.stevexmh.net";
 
 const TIMESTAMP_REGEX = /^\[(\d{2}):(\d{2})(?:[\.:](\d{2,3}))?\](.*)$/;
