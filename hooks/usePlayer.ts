@@ -9,6 +9,7 @@ import {
 import { Song, PlayState, PlayMode } from "../types";
 import { extractColors, shuffleArray } from "../services/utils";
 import { parseLyrics } from "../services/lyrics";
+import { useLyricOverlay } from "./useLyricOverlay";
 import {
   loadPlaybackSnapshot,
   savePlaybackSnapshot,
@@ -30,6 +31,8 @@ interface UsePlayerParams {
 }
 
 const MATCH_TIMEOUT_MS = 8000;
+const PRELOAD_TIMEOUT_MS = 6000; // 预载阶段用稍短的超时
+const PRELOAD_RETRY_DELAY_MS = 500; // 首次失败后等 500ms 再重试一次
 
 const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
   return new Promise<T>((resolve, reject) => {
@@ -492,6 +495,148 @@ export const usePlayer = ({
     [currentSong, updateSongInQueue],
   );
 
+  /**
+   * 预测下一首要播放的歌曲（基于 playMode）。
+   * - LOOP_ONE: 无下一首，返回 null
+   * - SHUFFLE:  peek poolRef 头部（不消费），保证预载的就是真随机的下一首
+   * - LOOP_ALL: 顺序模式 queue[(currentIndex + 1) % length]
+   */
+  const predictNextSong = useCallback((): Song | null => {
+    if (queue.length === 0) return null;
+    if (playMode === PlayMode.LOOP_ONE) return null;
+
+    if (playMode === PlayMode.SHUFFLE) {
+      const currId = currentSong?.id ?? null;
+      // 过滤已失效的 id 与当前 id（与 pickShuffle 同样的清理逻辑）
+      const ids = new Set(queue.map((s) => s.id));
+      const seen = new Set<string>();
+      const pool = poolRef.current.filter((id) => {
+        if (!ids.has(id) || id === currId || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+      poolRef.current = pool;
+      const nextId = pool[0];
+      return nextId ? queue.find((s) => s.id === nextId) ?? null : null;
+    }
+
+    // LOOP_ALL
+    if (currentIndex < 0) return null;
+    const nextIdx = (currentIndex + 1) % queue.length;
+    return queue[nextIdx] ?? null;
+  }, [queue, playMode, currentIndex, currentSong?.id]);
+
+  /**
+   * 单首歌词预载：带 1 次重试。
+   * 返回 'success' | 'failed' | 'skip'。
+   * - 'success': 在线匹配成功（已写入 lyrics，覆盖本地兜底），或无需匹配
+   * - 'failed': 在线 API 不可用（两次都失败），已标记 skipOnlineLyrics；
+   *             若该歌曲已有本地歌词，本地歌词继续兜底
+   * - 'skip': 该歌曲不需要在线匹配（needsLyricsMatch=false 或已标记 skipOnlineLyrics）
+   *
+   * 关键：已有本地歌词时仍尝试预载，让在线歌词（含翻译/TTML）覆盖本地。
+   */
+  const preloadLyricsForSong = useCallback(
+    async (song: Song): Promise<"success" | "failed" | "skip"> => {
+      // 不需要在线匹配（已被前次升级成功或本来就无此标记）
+      if (!song.needsLyricsMatch) return "skip";
+      // 已被预载标记跳过
+      if (song.skipOnlineLyrics) return "skip";
+      // 已有本地歌词时仍继续：在线歌词优先级更高
+      // 已被前次预载标记跳过
+      if (song.skipOnlineLyrics) return "skip";
+
+      const fetchOnce = async (): Promise<MatchedLyricsResult | null> => {
+        if (song.isNetease && song.neteaseId) {
+          return await withTimeout(
+            fetchLyricsById(song.neteaseId),
+            PRELOAD_TIMEOUT_MS,
+          );
+        }
+        return await withTimeout(
+          searchAndMatchLyrics(song.title, song.artist),
+          PRELOAD_TIMEOUT_MS,
+        );
+      };
+
+      let result: MatchedLyricsResult | null = null;
+      let lastErr: unknown = null;
+
+      // 第一次尝试
+      try {
+        result = await fetchOnce();
+      } catch (err) {
+        lastErr = err;
+        console.warn(
+          `[preload] 首次失败 (${song.title}):`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+
+      // 第二次重试（首次失败或返回 null 时）
+      if (!result) {
+        await new Promise((r) => setTimeout(r, PRELOAD_RETRY_DELAY_MS));
+        try {
+          result = await fetchOnce();
+        } catch (err) {
+          lastErr = err;
+          console.warn(
+            `[preload] 重试失败 (${song.title}):`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+
+      if (result) {
+        // 预载成功：写入歌词，清掉 needsLyricsMatch
+        updateSongInQueue(song.id, {
+          lyrics: mergeLyricsWithMetadata(result),
+          needsLyricsMatch: false,
+          skipOnlineLyrics: false,
+        });
+        console.log(`[preload] 成功 (${song.title})`);
+        return "success";
+      }
+
+      // 两次都失败：标记跳过，切歌时不再等超时
+      updateSongInQueue(song.id, { skipOnlineLyrics: true });
+      console.warn(
+        `[preload] 标记跳过 (${song.title}):`,
+        lastErr instanceof Error ? lastErr.message : "no result",
+      );
+      return "failed";
+    },
+    [mergeLyricsWithMetadata, updateSongInQueue],
+  );
+
+  // 预载 useEffect：每次切歌完成后，立即为下一首预载歌词。
+  // 这样上一首歌剩余的播放时间都用上了，API 挂掉时切歌后不会干等超时。
+  useEffect(() => {
+    if (!isReady || !currentSong) return;
+
+    const nextSong = predictNextSong();
+    // 没有下一首（LOOP_ONE 或单元素队列）就不预载
+    if (!nextSong || nextSong.id === currentSong.id) return;
+
+    let cancelled = false;
+    const run = async () => {
+      // 短延迟，让切歌动画/音频加载先处理完
+      await new Promise((r) => setTimeout(r, 300));
+      if (cancelled) return;
+      await preloadLyricsForSong(nextSong);
+    };
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isReady,
+    currentSong?.id,
+    predictNextSong,
+    preloadLyricsForSong,
+  ]);
+
   useEffect(() => {
     if (!currentSong) {
       if (matchStatus !== "idle") {
@@ -504,6 +649,7 @@ export const usePlayer = ({
     const songTitle = currentSong.title;
     const songArtist = currentSong.artist;
     const needsLyricsMatch = currentSong.needsLyricsMatch;
+    const skipOnlineLyrics = currentSong.skipOnlineLyrics;
     const existingLyrics = currentSong.lyrics ?? [];
     const isNeteaseSong = currentSong.isNetease;
     const songNeteaseId = currentSong.neteaseId;
@@ -515,7 +661,9 @@ export const usePlayer = ({
       updateSongInQueue(songId, {
         needsLyricsMatch: false,
       });
-      setMatchStatus("failed");
+      // 注意：不在这里清空 lyrics。已有本地歌词时 markMatchFailed 仅表示
+      // "在线升级失败"，本地歌词继续作为兜底显示。
+      setMatchStatus(existingLyrics.length > 0 ? "success" : "failed");
     };
 
     const markMatchSuccess = () => {
@@ -523,12 +671,27 @@ export const usePlayer = ({
       setMatchStatus("success");
     };
 
-    if (existingLyrics.length > 0) {
+    // 已有歌词 + 不需要在线升级 → 直接成功
+    if (existingLyrics.length > 0 && !needsLyricsMatch) {
       markMatchSuccess();
       return;
     }
 
-    if (!needsLyricsMatch) {
+    // 没有歌词 + 不需要匹配 → 失败
+    if (existingLyrics.length === 0 && !needsLyricsMatch) {
+      markMatchFailed();
+      return;
+    }
+
+    // 已有本地歌词 + 需要在线升级：继续走在线匹配流程（成功则覆盖，失败保留本地）
+    // 没有歌词 + 需要匹配：同样走在线匹配
+
+    // 预载阶段已探测在线 API 不可用 → 直接走本地兜底，不再等超时
+    if (skipOnlineLyrics) {
+      console.info(
+        `[lyrics] skipOnlineLyrics 已标记，跳过在线匹配: ${songTitle}` +
+          (existingLyrics.length > 0 ? "（保留本地歌词）" : "（无本地歌词）"),
+      );
       markMatchFailed();
       return;
     }
@@ -853,6 +1016,36 @@ export const usePlayer = ({
     };
   }, [currentSong?.fileUrl]);
 
+  // 桌面歌词开关状态（由 App.tsx 传入或在此管理）
+  const [desktopLyricsEnabled, setDesktopLyricsEnabled] = useState(false);
+
+  // 推送当前播放状态到桌面歌词窗口（WebSocket :8787）
+  useLyricOverlay({
+    currentSong,
+    playState,
+    currentTime,
+    duration,
+    enabled: desktopLyricsEnabled,
+    onControl: (action) => {
+      switch (action) {
+        case "play":
+        case "pause":
+          togglePlay();
+          break;
+        case "prev":
+          playPrev();
+          break;
+        case "next":
+          playNext();
+          break;
+        case "quit":
+          // 桌面歌词窗口被关闭，同步状态
+          setDesktopLyricsEnabled(false);
+          break;
+      }
+    },
+  });
+
   return {
     audioRef,
     currentSong,
@@ -879,6 +1072,8 @@ export const usePlayer = ({
     handleAudioEnded,
     setSpeed: handleSetSpeed,
     togglePreservesPitch: handleTogglePreservesPitch,
+    desktopLyricsEnabled,
+    setDesktopLyricsEnabled,
     pitch: 0, // Default pitch
     setPitch: (pitch: number) => { }, // Placeholder
     play,

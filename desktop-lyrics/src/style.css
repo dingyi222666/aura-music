@@ -1,0 +1,241 @@
+:root {
+  --font-size: 26px;
+  --font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", "SF Pro Display", "Inter", sans-serif;
+  --text-color: rgba(255, 255, 255, 0.96);
+  --translation-color: rgba(255, 255, 255, 0.62);
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 8px 36px 42px 16px; /* 右侧留空给关闭按钮，底部留空给工具栏 */
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  transition: background 0.2s ease;
+}
+
+#app:hover {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+#app[data-passthrough="true"] {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding-bottom: 8px;
+}
+
+/* 穿透模式下隐藏工具栏 */
+#app[data-passthrough="true"] #toolbar {
+  display: none;
+}
+
+#app[data-passthrough="true"] .btn-close {
+  display: none;
+}
+
+.passthrough-toast {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(12, 16, 22, 0.6);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px) scale(0.98);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  white-space: nowrap;
+}
+
+.passthrough-toast.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.passthrough-toast kbd {
+  min-width: 20px;
+  padding: 3px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.28);
+}
+
+.passthrough-toast .toast-label {
+  font-weight: 600;
+}
+
+.passthrough-toast .toast-action {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.lyric-block {
+  text-align: center;
+  width: 100%;
+  text-shadow: var(--shadow);
+  pointer-events: none;
+}
+
+.lyric-line {
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  word-break: break-word;
+}
+
+.line-original {
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.line-translation {
+  color: var(--translation-color);
+  font-size: 0.78em;
+  font-weight: 400;
+  margin-top: 2px;
+  min-height: 0.6em;
+}
+
+.lyric-line.empty {
+  opacity: 0.3;
+}
+
+/* 淡入动画 */
+.lyric-block.fade-enter {
+  animation: fadeEnter 0.3s ease-out;
+}
+
+@keyframes fadeEnter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 右上角关闭按钮（常驻显示） */
+.btn-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  padding: 0;
+  z-index: 10;
+}
+
+.btn-close:hover {
+  background: rgba(255, 80, 80, 0.5);
+  color: #fff;
+}
+
+.btn-close:active {
+  background: rgba(255, 80, 80, 0.7);
+}
+
+/* 底部控制条 */
+.toolbar {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+}
+
+.toolbar .ctrl-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  line-height: 1;
+  min-width: 28px;
+  height: 24px;
+}
+
+.toolbar .ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.toolbar .ctrl-btn:active {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.toolbar .ctrl-btn.active {
+  background: rgba(100, 180, 255, 0.25);
+  color: #a3d3ff;
+}
+
+.toolbar .divider {
+  width: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 2px 3px;
+  align-self: stretch;
+}

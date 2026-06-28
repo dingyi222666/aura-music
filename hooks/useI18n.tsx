@@ -27,6 +27,7 @@ interface Dict {
   top: {
     search: string;
     importLocal: string;
+    importLyrics: string;
     about: string;
     enterFullscreen: string;
     exitFullscreen: string;
@@ -141,6 +142,7 @@ export const dicts: Record<Lang, Dict> = {
     top: {
       search: "Search (Cmd+K)",
       importLocal: "Import Local Files",
+      importLyrics: "Load Lyrics Folder",
       about: "About Aura Music",
       enterFullscreen: "Enter Fullscreen",
       exitFullscreen: "Exit Fullscreen",
@@ -254,6 +256,7 @@ export const dicts: Record<Lang, Dict> = {
     top: {
       search: "搜索 (Cmd+K)",
       importLocal: "导入本地文件",
+      importLyrics: "加载歌词文件夹",
       about: "关于 Aura Music",
       enterFullscreen: "进入全屏",
       exitFullscreen: "退出全屏",

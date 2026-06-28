@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aura Desktop Lyrics</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app" data-passthrough="false">
+    <div id="lyric-block" class="lyric-block">
+      <div id="line-original" class="lyric-line line-original">等待 aura-music 开始播放…</div>
+      <div id="line-translation" class="lyric-line line-translation"></div>
+    </div>
+
+    <!-- 右上角关闭按钮（非穿透时常驻） -->
+    <button id="btn-close" class="btn-close" title="关闭">✕</button>
+
+    <!-- 穿透开启时短暂显示的提示 -->
+    <div id="passthrough-toast" class="passthrough-toast" aria-live="polite">
+      <span class="toast-label">鼠标穿透中</span>
+      <kbd>P</kbd>
+      <span class="toast-action">退出</span>
+    </div>
+
+    <!-- 底部控制条（非穿透时常驻显示） -->
+    <div id="toolbar" class="toolbar">
+      <button id="btn-prev-track" class="ctrl-btn" title="上一首">⏮</button>
+      <button id="btn-play-pause" class="ctrl-btn" title="播放/暂停">⏸</button>
+      <button id="btn-next-track" class="ctrl-btn" title="下一首">⏭</button>
+      <span class="divider"></span>
+      <button id="btn-prev" class="ctrl-btn" title="上一句">‹</button>
+      <button id="btn-next" class="ctrl-btn" title="下一句">›</button>
+      <span class="divider"></span>
+      <button id="btn-smaller" class="ctrl-btn" title="缩小字号">A-</button>
+      <button id="btn-bigger" class="ctrl-btn" title="放大字号">A+</button>
+      <button id="btn-passthrough" class="ctrl-btn" title="开启后按 P 退出穿透">穿透</button>
+    </div>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>

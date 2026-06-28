@@ -1,21 +1,28 @@
 import React, { useRef, useState } from "react";
 import { useI18n } from "../hooks/useI18n";
-import { AuraLogo, SearchIcon, LocalMusicIcon, InfoIcon, FullscreenIcon } from "./Icons";
+import { AuraLogo, SearchIcon, LocalMusicIcon, InfoIcon, FullscreenIcon, LyricsIcon, DesktopLyricsIcon } from "./Icons";
 import AboutDialog from "./AboutDialog";
 
 interface TopBarProps {
   onFilesSelected: (files: FileList) => void;
+  onLyricsFolderSelected: (files: FileList) => void;
   onSearchClick: () => void;
+  desktopLyricsEnabled: boolean;
+  onToggleDesktopLyrics: () => void;
   disabled?: boolean;
 }
 
 const TopBar: React.FC<TopBarProps> = ({
   onFilesSelected,
+  onLyricsFolderSelected,
   onSearchClick,
+  desktopLyricsEnabled,
+  onToggleDesktopLyrics,
   disabled,
 }) => {
   const { dict } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lyricsDirInputRef = useRef<HTMLInputElement>(null);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isTopBarActive, setIsTopBarActive] = useState(false);
@@ -90,6 +97,14 @@ const TopBar: React.FC<TopBarProps> = ({
     e.target.value = "";
   };
 
+  const handleLyricsDirChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      onLyricsFolderSelected(files);
+    }
+    e.target.value = "";
+  };
+
   const baseTransitionClasses = "transition-all duration-300 ease-out";
   const childClasses = isTopBarActive
     ? "opacity-100 translate-y-0 pointer-events-auto"
@@ -139,6 +154,30 @@ const TopBar: React.FC<TopBarProps> = ({
             <LocalMusicIcon className="w-[18px] h-[18px]" />
           </button>
 
+          {/* Lyrics Folder Button */}
+          <button
+            onClick={() => lyricsDirInputRef.current?.click()}
+            disabled={disabled}
+            className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-95 text-white/75 hover:text-white transition-all duration-200 flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.05)] disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed pointer-events-auto"
+            title={dict.top.importLyrics}
+          >
+            <LyricsIcon className="w-[18px] h-[18px]" />
+          </button>
+
+          {/* Desktop Lyrics Toggle */}
+          <button
+            onClick={onToggleDesktopLyrics}
+            disabled={disabled}
+            className={`w-9 h-9 rounded-full transition-all duration-200 flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.05)] pointer-events-auto active:scale-95 ${
+              desktopLyricsEnabled
+                ? "bg-emerald-500/30 text-emerald-300 ring-1 ring-emerald-400/40"
+                : "bg-white/5 hover:bg-white/10 text-white/75 hover:text-white"
+            } disabled:opacity-40 disabled:scale-100 disabled:cursor-not-allowed`}
+            title={desktopLyricsEnabled ? "关闭桌面歌词" : "开启桌面歌词"}
+          >
+            <DesktopLyricsIcon className="w-[18px] h-[18px]" />
+          </button>
+
           {/* About Button */}
           <button
             onClick={() => setIsAboutOpen(true)}
@@ -162,6 +201,18 @@ const TopBar: React.FC<TopBarProps> = ({
             ref={fileInputRef}
             onChange={handleFileChange}
             accept="audio/*,.lrc,.txt,.json"
+            multiple
+            className="hidden"
+          />
+
+          {/* Hidden lyrics directory picker (webkitdirectory) */}
+          <input
+            type="file"
+            ref={lyricsDirInputRef}
+            onChange={handleLyricsDirChange}
+            // @ts-expect-error - webkitdirectory is non-standard but widely supported
+            webkitdirectory=""
+            directory=""
             multiple
             className="hidden"
           />

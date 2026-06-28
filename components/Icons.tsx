@@ -340,6 +340,54 @@ export const LocalMusicIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+export const LyricsIcon: React.FC<IconProps> = ({
+  className = "",
+  ...props
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    {...props}
+  >
+    <path d="M9 18V5l12-2v13" />
+    <circle cx="6" cy="18" r="3" />
+    <circle cx="18" cy="16" r="3" />
+  </svg>
+);
+
+export const DesktopLyricsIcon: React.FC<IconProps & { active?: boolean }> = ({
+  className = "",
+  active = false,
+  ...props
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={active ? "currentColor" : "none"}
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    {...props}
+  >
+    {/* 显示器外框 */}
+    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+    {/* 底座 */}
+    <line x1="8" y1="21" x2="16" y2="21" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+    {/* 屏幕内的歌词行（两道横线模拟歌词） */}
+    <line x1="6" y1="8" x2="14" y2="8" />
+    <line x1="6" y1="12" x2="10" y2="12" />
+  </svg>
+);
+
 export const TrashIcon: React.FC<IconProps> = ({ className }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"

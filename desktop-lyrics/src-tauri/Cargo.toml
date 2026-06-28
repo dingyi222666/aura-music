@@ -1,0 +1,32 @@
+[package]
+name = "aura-desktop-lyrics"
+version = "1.0.0"
+description = "Desktop lyric overlay window for Aura Music Player"
+authors = ["Y"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "aura_desktop_lyrics_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Tauri bundle 元数据（用于 NSIS/MSI 安装包信息）
+[package.metadata.bundle]
+identifier = "com.auramusic.desktoplyrics"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

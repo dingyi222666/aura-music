@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Desktop lyrics / Tauri build outputs
+desktop-lyrics/src-tauri/target/
+desktop-lyrics/src-tauri/target
+desktop-lyrics/dist/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

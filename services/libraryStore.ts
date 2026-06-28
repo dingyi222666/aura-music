@@ -20,6 +20,8 @@ export interface StoredSong {
   colors?: string[];
   themeColor?: string;
   needsLyricsMatch?: boolean;
+  skipOnlineLyrics?: boolean;
+  originalFileName?: string;
   isNetease?: boolean;
   neteaseId?: string;
   album?: string;
@@ -127,6 +129,8 @@ export const toStoredSong = (song: Song): StoredSong => {
     colors: song.colors,
     themeColor: song.themeColor,
     needsLyricsMatch: song.needsLyricsMatch,
+    skipOnlineLyrics: song.skipOnlineLyrics,
+    originalFileName: song.originalFileName,
     isNetease: song.isNetease,
     neteaseId: song.neteaseId,
     album: song.album,
@@ -150,6 +154,8 @@ export const fromStoredSong = (song: StoredSong, fileUrl?: string): Song | null 
       colors: song.colors,
       themeColor: song.themeColor,
       needsLyricsMatch: song.needsLyricsMatch,
+      skipOnlineLyrics: song.skipOnlineLyrics,
+      originalFileName: song.originalFileName,
       isNetease: song.isNetease,
       neteaseId: song.neteaseId,
       album: song.album,
@@ -173,6 +179,8 @@ export const fromStoredSong = (song: StoredSong, fileUrl?: string): Song | null 
     colors: song.colors,
     themeColor: song.themeColor,
     needsLyricsMatch: song.needsLyricsMatch,
+    skipOnlineLyrics: song.skipOnlineLyrics,
+    originalFileName: song.originalFileName,
     isNetease: song.isNetease,
     neteaseId: song.neteaseId,
     album: song.album,

@@ -33,6 +33,8 @@ export interface Song {
   colors?: string[]; // Array of dominant/accent colors
   themeColor?: string; // Stable dominant color for PWA/browser chrome
   needsLyricsMatch?: boolean; // Flag indicating song needs cloud lyrics matching
+  skipOnlineLyrics?: boolean; // 预载探测失败时置 true，切歌后跳过在线匹配避免再等超时
+  originalFileName?: string; // Audio file basename (no extension) for lyrics matching
   // Netease specific fields
   isNetease?: boolean;
   neteaseId?: string;

@@ -165,6 +165,22 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLyricsFolderSelected = useCallback(
+    async (files: FileList) => {
+      if (playlist.queue.length === 0) {
+        toast.error(dict.app.importFail);
+        return;
+      }
+      const matched = await playlist.matchLyricsFromFiles(files);
+      if (matched > 0) {
+        toast.success(`已为 ${matched} 首歌曲匹配到歌词`);
+      } else {
+        toast.error("未匹配到任何歌词（请确认文件名格式为 \"歌手 - 歌名.lrc\"）");
+      }
+    },
+    [playlist.matchLyricsFromFiles, playlist.queue.length, dict.app.importFail, toast],
+  );
+
   const handleImportUrl = useCallback(async (input: string): Promise<boolean> => {
     const trimmed = input.trim();
     if (!trimmed) return false;
@@ -396,7 +412,27 @@ const App: React.FC = () => {
       {/* Top Bar */}
       <TopBar
         onFilesSelected={handleFileChange}
+        onLyricsFolderSelected={handleLyricsFolderSelected}
         onSearchClick={() => setShowSearch(true)}
+        desktopLyricsEnabled={player.desktopLyricsEnabled}
+        onToggleDesktopLyrics={async () => {
+          if (player.desktopLyricsEnabled) {
+            // 关闭：HTTP quit + 状态置 false
+            const { quitDesktopLyrics } = await import("./hooks/useLyricOverlay");
+            await quitDesktopLyrics();
+            player.setDesktopLyricsEnabled(false);
+          } else {
+            // 开启：HTTP launch + 状态置 true
+            const { launchDesktopLyrics } = await import("./hooks/useLyricOverlay");
+            const result = await launchDesktopLyrics();
+            if (result.ok) {
+              player.setDesktopLyricsEnabled(true);
+              toast.success("桌面歌词已开启");
+            } else {
+              toast.error(`桌面歌词启动失败: ${result.message}`);
+            }
+          }
+        }}
       />
 
       {/* Search Modal - Always rendered to preserve state, visibility handled internally */}

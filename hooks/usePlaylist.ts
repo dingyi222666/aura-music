@@ -158,6 +158,144 @@ export const usePlaylist = () => {
     appendSongs(songs);
   }, [appendSongs]);
 
+  /**
+   * 从一批 .lrc 文件中匹配歌词到当前队列中已有歌曲。
+   * 用于「加载歌词文件夹」功能：用户单独选一个 .lrc 目录，
+   * 系统按多策略匹配给已导入的歌曲补上歌词。
+   * 返回成功匹配的歌曲数量。
+   */
+  const matchLyricsFromFiles = useCallback(
+    async (files: FileList | File[]): Promise<number> => {
+      const fileList =
+        files instanceof FileList ? Array.from(files) : Array.from(files);
+
+      // 仅保留歌词文件
+      const lyricsFiles = fileList.filter((file) => {
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        return ext === "lrc" || ext === "txt" || ext === "json";
+      });
+
+      if (lyricsFiles.length === 0) return 0;
+
+      // 提取 .lrc 文件的 basename（不含扩展名，保留全名）
+      const lrcBasenameList = lyricsFiles.map((file) => ({
+        file,
+        basename: file.name.replace(/\.[^/.]+$/, ""),
+      }));
+
+      // 提前缓存已读取的 .lrc 文本
+      const lrcTextCache = new Map<File, string>();
+      const readLrc = async (file: File): Promise<string> => {
+        if (lrcTextCache.has(file)) return lrcTextCache.get(file)!;
+        const text = await file.text();
+        lrcTextCache.set(file, text);
+        return text;
+      };
+
+      // 提取 lrc basename 的 title 部分（"-" 后的部分，去掉网易云 ID）
+      const extractTitlePart = (basename: string): string => {
+        const firstDashIndex = basename.indexOf("-");
+        let title =
+          firstDashIndex > 0 && firstDashIndex < basename.length - 1
+            ? basename.substring(firstDashIndex + 1).trim()
+            : basename;
+        title = title.replace(/[\(\[]?\d{7,9}[\)\]]?/g, "").trim();
+        return title;
+      };
+
+      let matchCount = 0;
+
+      // 在 setQueue 之外异步读取并匹配，最后一次性更新
+      const currentQueue = queue; // 闭包捕获当前快照
+      const next: Song[] = [];
+      for (const song of currentQueue) {
+        // 已有歌词且非空，跳过
+        if (song.lyrics && song.lyrics.length > 0) {
+          next.push(song);
+          continue;
+        }
+
+        // 多策略匹配，找到最佳 .lrc 文件
+        let matchedFile: File | undefined;
+        let matchedScore = -1;
+
+        const songTitleLower = song.title.toLowerCase().trim();
+        const songArtistLower = song.artist.toLowerCase().trim();
+        const songOriginalName = (song.originalFileName ?? "").toLowerCase().trim();
+
+        for (const { file, basename } of lrcBasenameList) {
+          const basenameLower = basename.toLowerCase();
+          const lrcTitlePart = extractTitlePart(basename).toLowerCase();
+          let score = -1;
+
+          // 策略 1: 音频原始文件名 == lrc 原始 basename（最高优先级，95 分）
+          if (songOriginalName && songOriginalName === basenameLower) {
+            score = 95;
+          }
+          // 策略 2: song.artist + " - " + song.title == lrc basename（90 分）
+          else if (
+            songArtistLower &&
+            songTitleLower &&
+            `${songArtistLower} - ${songTitleLower}` === basenameLower
+          ) {
+            score = 90;
+          }
+          // 策略 3: song.title == lrc title 部分（85 分）
+          else if (songTitleLower && songTitleLower === lrcTitlePart) {
+            score = 85;
+          }
+          // 策略 4: fuzzy 匹配 song.originalFileName 与 lrc basename（80 分阈值）
+          else if (songOriginalName) {
+            const similarity = calculateSimilarity(songOriginalName, basenameLower);
+            if (similarity >= 0.9) score = 80 * similarity;
+          }
+          // 策略 5: fuzzy 匹配 song.title 与 lrc title 部分
+          else if (songTitleLower) {
+            const similarity = calculateSimilarity(songTitleLower, lrcTitlePart);
+            if (similarity >= 0.9) score = 75 * similarity;
+          }
+
+          if (score > matchedScore) {
+            matchedScore = score;
+            matchedFile = file;
+          }
+        }
+
+        // 阈值 70 分以上才接受
+        if (matchedFile && matchedScore >= 70) {
+          try {
+            const text = await readLrc(matchedFile);
+            if (text && text.trim()) {
+              const parsed = parseLyrics(text);
+              if (parsed.length > 0) {
+                next.push({
+                  ...song,
+                  lyrics: parsed,
+                  // 保留 needsLyricsMatch: true，让在线 API 有机会覆盖本地歌词
+                  // （本地歌词作为兜底，在线歌词优先级更高，含翻译/TTML 等）
+                  needsLyricsMatch: song.needsLyricsMatch ?? true,
+                });
+                matchCount++;
+                continue;
+              }
+            }
+          } catch (err) {
+            console.warn(`Failed to read lyrics for ${song.title}:`, err);
+          }
+        }
+
+        next.push(song);
+      }
+
+      if (matchCount > 0) {
+        setQueue(next);
+      }
+
+      return matchCount;
+    },
+    [queue],
+  );
+
   const reorder = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
 
@@ -332,6 +470,7 @@ export const usePlaylist = () => {
           colors: colors && colors.length > 0 ? colors : undefined,
           themeColor,
           needsLyricsMatch: lyrics.length === 0, // Flag for cloud matching
+          originalFileName: basename, // 保存原始文件名（不含扩展名）供歌词匹配
         });
       }
 
@@ -431,6 +570,7 @@ export const usePlaylist = () => {
     reorder,
     removeSongs,
     addLocalFiles,
+    matchLyricsFromFiles,
     importFromUrl,
     setQueue,
   };
