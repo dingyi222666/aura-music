@@ -10,7 +10,6 @@
     "test": "bun test tests"
   },
   "dependencies": {
-    "@google/genai": "^1.30.0",
     "@react-spring/web": "^10.0.3",
     "colorthief": "^3.3.1",
     "fast-xml-parser": "^4.5.0",

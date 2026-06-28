@@ -100,7 +100,7 @@ Tests live under `tests/` and use `bun:test` (`import { test, expect } from "bun
 - Use ESM import syntax at the top of the file.
 - Group imports roughly in this order:
   1. Node/built-in modules (`node:path`, `node:fs`, etc.).
-  2. Third-party packages (`react`, `@react-spring/web`, `@google/genai`).
+  2. Third-party packages (`react`, `@react-spring/web`, `fast-xml-parser`).
   3. Absolute project imports via `@/...`.
   4. Relative imports (`../services/...`, `./components/...`).
 - Keep React imports explicit when needed (e.g. `import React, { useState } from "react";`).
@@ -266,10 +266,8 @@ const table = sqliteTable("session", {
 
 ## Vite, Env, and Paths
 
-- Vite config lives in `vite.config.ts` and uses `loadEnv` to inject
-  environment variables.
-- The `GEMINI_API_KEY` is read from env and exposed via `process.env.*` in
-  the client bundle; **never** hard-code secrets in the repo.
+- Vite config lives in `vite.config.ts` and uses `loadEnv` for build-time
+  settings such as `VITE_BASE_PATH`.
 - When adding new env variables, wire them through Vite's `loadEnv` and
   document them in this file or in README.
 - Use the `@` alias if it improves readability, e.g. `@/services/lyrics`.

@@ -41,17 +41,12 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    define: {
-      "process.env.API_KEY": JSON.stringify(env.GEMINI_API_KEY),
-      "process.env.GEMINI_API_KEY": JSON.stringify(env.GEMINI_API_KEY),
-    },
     build: {
       rollupOptions: {
         output: {
           manualChunks(id) {
             if (!id.includes("node_modules")) return;
             if (id.includes("@react-spring")) return "spring";
-            if (id.includes("@google/genai")) return "genai";
             if (id.includes("react") || id.includes("scheduler")) return "react";
             if (
               id.includes("colorthief") ||

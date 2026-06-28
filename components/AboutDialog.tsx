@@ -70,9 +70,9 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
 
           {/* Tech Stack Grid */}
           <div className="w-full grid grid-cols-3 gap-2 mb-8">
-            <TechBadge label="Gemini 3.5 Flash" />
-            <TechBadge label="GPT-5.5" />
-            <TechBadge label="Claude Opus 4.8" />
+            <TechBadge label="React 19" />
+            <TechBadge label="Tauri 2" />
+            <TechBadge label="WebSocket" />
           </div>
 
           {/* Selection List */}
