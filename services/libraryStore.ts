@@ -1,4 +1,5 @@
 import { PlayMode, Song } from "../types";
+import { getNeteaseAudioUrl } from "./lyricsService";
 
 const DB = "aura-music";
 const VER = 1;
@@ -156,7 +157,9 @@ export const fromStoredSong = (song: StoredSong, fileUrl?: string): Song | null 
     };
   }
 
-  const origin = song.origin ?? "";
+  const origin = song.isNetease && song.neteaseId
+    ? getNeteaseAudioUrl(song.neteaseId)
+    : song.origin ?? "";
   if (!origin) {
     return null;
   }

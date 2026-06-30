@@ -28,6 +28,12 @@ const BG_FUTURE_ALPHA = 0.42;
 const BG_IDLE_ALPHA = 0.24;
 const BG_TRANS_ALPHA = 0.74;
 const TRANS_ALPHA = 0.8;
+const MAC_STROKE_RATIO = 0.018;
+
+const isMacPlatform = () => {
+  if (typeof navigator === "undefined") return false;
+  return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+};
 // Time constant for easing a line's colour from lit (white) back to idle when
 // it stops being active, so the brightness recovers instead of snapping.
 const ACTIVE_FADE_TAU = 0.16;
@@ -445,9 +451,16 @@ export const centerOf = (
 const getFonts = (isMobile: boolean, scale: number = 1) => {
   const baseSize = (isMobile ? 34 : 44) * scale;
   const transSize = (isMobile ? 19 : 24) * scale;
+  const mac = isMacPlatform();
+  const mainFamily = mac
+    ? `"SF Pro Display", "SF Pro", "PingFang SC", "Inter", sans-serif`
+    : `"SF Pro Display", "PingFang SC","Inter", sans-serif`;
+  const transFamily = mac
+    ? `"SF Pro Text", "SF Pro", "PingFang SC", "Inter", sans-serif`
+    : `"SF Pro Text", "PingFang SC", "Inter",sans-serif`;
   return {
-    main: `800 ${baseSize}px "SF Pro Display", "PingFang SC","Inter", sans-serif`,
-    trans: `600 ${transSize}px "SF Pro Text", "PingFang SC", "Inter",sans-serif`,
+    main: `800 ${baseSize}px ${mainFamily}`,
+    trans: `600 ${transSize}px ${transFamily}`,
     mainHeight: baseSize,
     transHeight: transSize * 1.3,
   };
@@ -464,6 +477,7 @@ export class LyricLine implements ILyricLine {
   private lastIsHovered: boolean = false;
   private isDirty: boolean = true;
   private pixelRatio: number;
+  private isMac: boolean;
   private logicalWidth: number = 0;
   private logicalHeight: number = 0;
   private liftCanvas: OffscreenCanvas | HTMLCanvasElement;
@@ -552,6 +566,25 @@ export class LyricLine implements ILyricLine {
     return show > 0.001 ? 1 : 0;
   }
 
+  private drawText(
+    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    height: number,
+  ) {
+    if (this.isMac) {
+      ctx.save();
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.lineWidth = Math.max(0.3, height * MAC_STROKE_RATIO);
+      ctx.strokeStyle = ctx.fillStyle as string;
+      ctx.strokeText(text, x, y);
+      ctx.restore();
+    }
+    ctx.fillText(text, x, y);
+  }
+
   private isInTimeRange(currentTime: number): boolean {
     const start = this.lyricLine.time;
     let end = this.lyricLine.endTime;
@@ -567,6 +600,7 @@ export class LyricLine implements ILyricLine {
   constructor(line: LyricLineType, index: number, isMobile: boolean) {
     this.lyricLine = line;
     this.isMobile = isMobile;
+    this.isMac = isMacPlatform();
     this.pixelRatio =
       typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
     this.canvas = document.createElement("canvas");
@@ -671,7 +705,9 @@ export class LyricLine implements ILyricLine {
       this.ctx.fillStyle = isBackground
         ? `rgba(255, 255, 255, ${BG_ACTIVE_ALPHA})`
         : "#FFFFFF";
-      this.layout.words.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
+      this.layout.words.forEach((w) =>
+        this.drawText(this.ctx, w.text, w.x, w.y, mainHeight),
+      );
     } else if (active) {
       const FLOAT_UP = 0.05 * mainHeight;
       const lineGroups = new Map<number, WordLayout[]>();
@@ -692,13 +728,15 @@ export class LyricLine implements ILyricLine {
             ? `rgba(255, 255, 255, ${BG_PAST_ALPHA})`
             : "#FFFFFF";
           lineWords.forEach((w) =>
-            this.ctx.fillText(w.text, w.x, w.y - FLOAT_UP),
+            this.drawText(this.ctx, w.text, w.x, w.y - FLOAT_UP, mainHeight),
           );
         } else {
           this.ctx.fillStyle = isBackground
             ? `rgba(255, 255, 255, ${BG_FUTURE_ALPHA})`
             : "rgba(255, 255, 255, 0.5)";
-          lineWords.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
+          lineWords.forEach((w) =>
+            this.drawText(this.ctx, w.text, w.x, w.y, mainHeight),
+          );
         }
       });
     } else {
@@ -707,7 +745,9 @@ export class LyricLine implements ILyricLine {
       // the line just went inactive.
       const baseOpacity = idle + (1 - idle) * clamp01(this.activeLevel);
       this.ctx.fillStyle = `rgba(255, 255, 255, ${baseOpacity})`;
-      this.layout.words.forEach((w) => this.ctx.fillText(w.text, w.x, w.y));
+      this.layout.words.forEach((w) =>
+        this.drawText(this.ctx, w.text, w.x, w.y, mainHeight),
+      );
     }
 
     const lastWordY =
@@ -733,7 +773,7 @@ export class LyricLine implements ILyricLine {
                 this.layout!.textWidth - this.ctx.measureText(lineText).width,
               )
             : 0;
-        this.ctx.fillText(lineText, x, y);
+        this.drawText(this.ctx, lineText, x, y, transHeight);
         y += transHeight;
       });
     }
@@ -840,7 +880,7 @@ export class LyricLine implements ILyricLine {
         this.liftCtx.fillStyle = grad;
       }
 
-      this.liftCtx.fillText(w.text, sidePad, topPad);
+      this.drawText(this.liftCtx, w.text, sidePad, topPad, mainHeight);
       this.liftCtx.restore();
 
       let lift = 0;
@@ -1039,7 +1079,7 @@ export class LyricLine implements ILyricLine {
     }
 
     this.liftCtx.fillStyle = gradient;
-    this.liftCtx.fillText(glyph, sidePad, topPad);
+    this.drawText(this.liftCtx, glyph, sidePad, topPad, fontHeight);
     this.liftCtx.restore();
 
     this.ctx.drawImage(

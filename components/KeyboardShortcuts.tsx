@@ -21,6 +21,11 @@ interface KeyboardShortcutsProps {
   onToggleSpeedDialog: () => void;
 }
 
+const isMacPlatform = () => {
+  if (typeof navigator === "undefined") return false;
+  return /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+};
+
 const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
   isPlaying,
   onPlayPause,
@@ -41,6 +46,7 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
   const { dict } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const modKey = isMacPlatform() ? "⌘" : "Ctrl";
 
   useEffect(() => {
     if (isOpen) {
@@ -211,13 +217,13 @@ return createPortal(
             <ShortcutItem keys={["Space"]} label={dict.keys.playPause} />
             <ShortcutItem keys={["L"]} label={dict.keys.loop} />
             <ShortcutItem keys={["←", "→"]} label={dict.keys.seek} />
-            <ShortcutItem keys={["Ctrl", "←/→"]} label={dict.keys.prevNext} />
+            <ShortcutItem keys={[modKey, "←/→"]} label={dict.keys.prevNext} />
             <ShortcutItem keys={["↑", "↓"]} label={dict.keys.volume} />
             <ShortcutItem keys={["V"]} label={dict.keys.volumeDialog} />
             <ShortcutItem keys={["S"]} label={dict.keys.speedDialog} />
-            <ShortcutItem keys={["Ctrl", "K"]} label={dict.keys.search} />
-            <ShortcutItem keys={["Ctrl", "P"]} label={dict.keys.playlist} />
-            <ShortcutItem keys={["Ctrl", "/"]} label={dict.keys.toggle} />
+            <ShortcutItem keys={[modKey, "K"]} label={dict.keys.search} />
+            <ShortcutItem keys={[modKey, "P"]} label={dict.keys.playlist} />
+            <ShortcutItem keys={[modKey, "/"]} label={dict.keys.toggle} />
           </div>
 
           {/* Footer Hint */}

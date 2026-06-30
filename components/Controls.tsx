@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useSpring, animated, useTransition, to } from "@react-spring/web";
 import { formatTime } from "../services/utils";
 import { useI18n } from "../hooks/useI18n";
+import { useFitScale } from "../hooks/useFitScale";
 import Visualizer from "./visualizer/Visualizer";
 import SmartImage from "./SmartImage";
 import {
@@ -271,7 +272,6 @@ const Controls: React.FC<ControlsProps> = ({
   const displayTime = isSeeking ? seekTime : interpolatedTime;
 
   const [coverSpring, coverApi] = useSpring(() => ({
-    scale: 1,
     boxShadow: isPlaying
       ? "0 12px 24px rgba(0,0,0,0.32)"
       : "0 6px 14px rgba(0,0,0,0.18)",
@@ -280,31 +280,21 @@ const Controls: React.FC<ControlsProps> = ({
 
   useEffect(() => {
     coverApi.start({
-      scale: 1,
       boxShadow: isPlaying
         ? "0 12px 24px rgba(0,0,0,0.32)"
         : "0 6px 14px rgba(0,0,0,0.18)",
-      config: { tension: 300, friction: 30 },
     });
   }, [isPlaying, coverApi]);
 
-  useEffect(() => {
-    if (!coverUrl) return;
-    coverApi.start({
-      scale: 0.95,
-      config: { tension: 320, friction: 24 },
-    });
-    const timeout = window.setTimeout(() => {
-      coverApi.start({
-        scale: 1,
-        boxShadow: isPlaying
-          ? "0 12px 24px rgba(0,0,0,0.32)"
-          : "0 6px 14px rgba(0,0,0,0.18)",
-        config: { tension: 260, friction: 32 },
-      });
-    }, 180);
-    return () => clearTimeout(timeout);
-  }, [coverUrl, isPlaying, coverApi]);
+  // Cover breathes with playback: larger while playing, smaller while paused.
+  // Drives the cover transform below; paused stays small (no shrink-then-rebound).
+  const coverScaleSpring = useSpring({
+    scale: isPlaying ? 1.02 : 0.97,
+    config: {
+      tension: isPlaying ? 320 : 260,
+      friction: isPlaying ? 22 : 30,
+    },
+  });
 
   // Close popups when clicking outside
   useEffect(() => {
@@ -391,45 +381,49 @@ const Controls: React.FC<ControlsProps> = ({
     return <VolumeHighFilledIcon className="w-4 h-4" />;
   };
 
-  const controlsScaleSpring = useSpring({
-    scale: isPlaying ? 1.02 : 0.97,
-    config: {
-      tension: isPlaying ? 320 : 260,
-      friction: isPlaying ? 22 : 30,
-    },
-    immediate: false,
-  });
-
   // Calculate buffered percentage from actual audio buffered time
   const bufferedWidthPercent = duration > 0
     ? Math.min(100, Math.max(0, (bufferedEnd / duration) * 100))
     : 0;
 
+  const { ref: fitRef, height: fitHeight, scale: fitScale } = useFitScale<HTMLDivElement>();
+
   return (
-    <div className="w-full max-w-[480px] flex flex-col items-center justify-center text-white select-none mx-auto p-4 sm:p-6 font-sans">
-      {/* Cover Section */}
-      <animated.div
+    <div
+      className="w-full max-w-[480px] mx-auto"
+      style={{ height: fitHeight > 0 ? fitHeight : undefined }}
+    >
+      <div
+        ref={fitRef}
+        className="w-full flex flex-col items-center justify-center text-white select-none p-4 sm:p-6 font-sans origin-top"
         style={{
-          boxShadow: coverSpring.boxShadow,
-          transform: coverSpring.scale.to((s) => `scale(${s})`),
+          transform: fitScale < 1 ? `scale(${fitScale})` : undefined,
+          transformOrigin: "top center",
         }}
-        className="relative aspect-square w-full rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 overflow-hidden mb-10"
       >
-        {coverUrl ? (
-          <SmartImage
-            src={coverUrl}
-            alt={dict.controls.albumArt}
-            containerClassName="absolute inset-0 overflow-hidden"
-            imgClassName="absolute inset-0 block w-full h-full object-cover"
-            loading="eager"
-          />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-white/20">
-            <div className="text-8xl mb-4">♪</div>
-            <p className="text-sm">{dict.controls.noMusic}</p>
-          </div>
-        )}
-      </animated.div>
+        {/* Cover Section */}
+        <animated.div
+          style={{
+            boxShadow: coverSpring.boxShadow,
+            transform: coverScaleSpring.scale.to((s) => `scale(${s})`),
+          }}
+          className="relative aspect-square w-full rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 overflow-hidden mb-10"
+        >
+          {coverUrl ? (
+            <SmartImage
+              src={coverUrl}
+              alt={dict.controls.albumArt}
+              containerClassName="absolute inset-0 overflow-hidden"
+              imgClassName="absolute inset-0 block w-full h-full object-cover"
+              loading="eager"
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-white/20">
+              <div className="text-8xl mb-4">♪</div>
+              <p className="text-sm">{dict.controls.noMusic}</p>
+            </div>
+          )}
+        </animated.div>
 
       {/* Song Info */}
       <div className="w-full flex items-center justify-between mb-8 px-1">
@@ -600,6 +594,7 @@ const Controls: React.FC<ControlsProps> = ({
           />
         </div>
         <VolumeHighIcon className="w-3.5 h-3.5 text-white/60 fill-current" />
+      </div>
       </div>
     </div>
   );

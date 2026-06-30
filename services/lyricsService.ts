@@ -1,7 +1,7 @@
 import { fetchViaProxy } from "./utils";
 import { isMetadataLine } from "./lyrics/types";
 
-const METING_API = "https://meting.mikus.ink/api";
+const METING_API = "https://api.qijieya.cn/meting/";
 const NETEASE_SEARCH_API = "https://api.jimsdeng.eu.org/cloudsearch";
 const NETEASECLOUD_API_BASE = "https://api.jimsdeng.eu.org";
 const TTML_DB_BASE = "https://amll-ttml-db.stevexmh.net";
@@ -334,7 +334,7 @@ export const mergeMetadata = (input: {
 };
 
 export const getNeteaseAudioUrl = (id: string) => {
-  return `${METING_API}?server=netease&type=url&id=${id}`;
+  return `${METING_API}?type=url&id=${id}`;
 };
 
 const fetchTtmlByNeteaseId = async (id: string): Promise<string | null> => {
