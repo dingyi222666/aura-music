@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useToast } from "./hooks/useToast";
 import { PlayState, Song } from "./types";
 import FluidBackground from "./components/FluidBackground";
@@ -67,12 +67,7 @@ const App: React.FC = () => {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [dragOffsetX, setDragOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const mobileViewportRef = useRef<HTMLDivElement>(null);
   const theme = currentSong?.themeColor || getThemeColor(currentSong?.colors);
-  const [paneWidth, setPaneWidth] = useState(() => {
-    if (typeof window === "undefined") return 0;
-    return window.innerWidth;
-  });
   const openPlaylist = useCallback(() => {
     setShowPlaylist(true);
   }, []);
@@ -119,21 +114,6 @@ const App: React.FC = () => {
       setTouchStartX(null);
       setDragOffsetX(0);
     }
-  }, [isMobileLayout]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const updateWidth = () => {
-      setPaneWidth(window.innerWidth);
-    };
-
-    updateWidth();
-    window.addEventListener("resize", updateWidth);
-    window.visualViewport?.addEventListener("resize", updateWidth);
-    return () => {
-      window.removeEventListener("resize", updateWidth);
-      window.visualViewport?.removeEventListener("resize", updateWidth);
-    };
   }, [isMobileLayout]);
 
   // Global Keyboard Registry Initialization
@@ -336,13 +316,14 @@ const App: React.FC = () => {
     </div>
   );
 
-  const fallbackWidth = typeof window !== "undefined" ? window.innerWidth : 0;
-  const effectivePaneWidth = paneWidth || fallbackWidth;
-  const baseOffset = activePanel === "lyrics" ? -effectivePaneWidth : 0;
-  const mobileTranslate = baseOffset + dragOffsetX;
+  const shift = activePanel === "lyrics" ? "-50%" : "0px";
+  const transform = `translateX(calc(${shift} + ${dragOffsetX}px))`;
 
   return (
-    <div className="relative w-full h-screen flex flex-col overflow-hidden">
+    <div
+      className="relative w-full h-screen flex flex-col overflow-hidden"
+      style={{ height: "100dvh" }}
+    >
       <FluidBackground
         key={isMobileLayout ? "mobile" : "desktop"}
         colors={currentSong?.colors || []}
@@ -416,7 +397,6 @@ const App: React.FC = () => {
       {isMobileLayout ? (
         <div className="flex-1 relative w-full h-full">
           <div
-            ref={mobileViewportRef}
             className="w-full h-full overflow-hidden"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -424,22 +404,15 @@ const App: React.FC = () => {
             onTouchCancel={handleTouchCancel}
           >
             <div
-              className={`flex h-full ${isDragging ? "transition-none" : "transition-transform duration-300"}`}
+              className={`flex h-full w-[200%] ${isDragging ? "transition-none" : "transition-transform duration-300"}`}
               style={{
-                width: `${effectivePaneWidth * 2}px`,
-                transform: `translateX(${mobileTranslate}px)`,
+                transform,
               }}
             >
-              <div
-                className="flex-none h-full"
-                style={{ width: effectivePaneWidth }}
-              >
+              <div className="flex-none h-full w-1/2">
                 {controlsSection}
               </div>
-              <div
-                className="flex-none h-full"
-                style={{ width: effectivePaneWidth }}
-              >
+              <div className="flex-none h-full w-1/2">
                 {lyricsSection}
               </div>
             </div>
