@@ -222,7 +222,7 @@ void main() {
 // ---------------------------------------------------------------------------
 
 interface WorkerCommand {
-  type: "init" | "resize" | "colors" | "play" | "pause" | "coverImage";
+  type: "init" | "resize" | "colors" | "play" | "pause" | "coverImage" | "dispose";
   canvas?: OffscreenCanvas;
   width?: number;
   height?: number;
@@ -426,6 +426,43 @@ const makeBlackTex = (): Tex | null => {
 const freeTex = (item: Tex | null) => {
   if (!gl || !item) return;
   gl.deleteTexture(item.tex);
+};
+
+const dispose = () => {
+  if (rafId !== null) {
+    self.cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+  if (!gl) return;
+
+  freeTex(texA);
+  freeTex(texB);
+  freeFbo(blurFboA);
+  freeFbo(blurFboB);
+  if (quadBuffer) gl.deleteBuffer(quadBuffer);
+  if (kawaseProg) gl.deleteProgram(kawaseProg);
+  if (mainProg) gl.deleteProgram(mainProg);
+
+  texA = null;
+  texB = null;
+  blurFboA = null;
+  blurFboB = null;
+  quadBuffer = null;
+  kawaseProg = null;
+  mainProg = null;
+  kawaseU_texture = null;
+  kawaseU_texelSize = null;
+  kawaseU_offset = null;
+  mainU_texA = null;
+  mainU_texB = null;
+  mainU_texASize = null;
+  mainU_texBSize = null;
+  mainU_mix = null;
+  mainU_resolution = null;
+  mainU_time = null;
+
+  gl.getExtension("WEBGL_lose_context")?.loseContext();
+  gl = null;
 };
 
 const swapTex = (next: Tex) => {
@@ -666,6 +703,12 @@ const loop = (now: number) => {
 self.onmessage = (event: MessageEvent<WorkerCommand>) => {
   const data = event.data;
 
+  if (data.type === "dispose") {
+    dispose();
+    self.close();
+    return;
+  }
+
   if (data.type === "init" && data.canvas) {
     gl = data.canvas.getContext("webgl", {
       alpha: false,
@@ -732,5 +775,6 @@ self.onmessage = (event: MessageEvent<WorkerCommand>) => {
   }
   if (data.type === "coverImage" && data.imageData) {
     onNewCover(data.imageData);
+    data.imageData.close();
   }
 };

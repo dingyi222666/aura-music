@@ -62,6 +62,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
   const coverUrlRef = useRef<string | undefined>(coverUrl);
   const [canvasInstanceKey, setCanvasInstanceKey] = useState(0);
   const previousModeRef = useRef(isMobileLayout);
+  const [active, setActive] = useState(true);
 
   const normalizedColors = useMemo(
     () => (colors && colors.length > 0 ? colors : mobileDefaultColors),
@@ -84,6 +85,25 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    const show = () => setActive(document.visibilityState !== "hidden");
+    const hide = () => setActive(false);
+
+    show();
+    window.addEventListener("focus", show);
+    window.addEventListener("pageshow", show);
+    window.addEventListener("blur", hide);
+    window.addEventListener("pagehide", hide);
+    document.addEventListener("visibilitychange", show);
+    return () => {
+      window.removeEventListener("focus", show);
+      window.removeEventListener("pageshow", show);
+      window.removeEventListener("blur", hide);
+      window.removeEventListener("pagehide", hide);
+      document.removeEventListener("visibilitychange", show);
+    };
+  }, []);
 
   useEffect(() => {
     if (previousModeRef.current !== isMobileLayout) {
@@ -213,6 +233,15 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    if (!active) {
+      rendererRef.current?.stop();
+      rendererRef.current = null;
+      if (canvas.dataset.offscreenTransferred === "true") {
+        setCanvasInstanceKey((prev) => prev + 1);
+      }
+      return;
+    }
+
     if (canvas.dataset.offscreenTransferred === "true") {
       setCanvasInstanceKey((prev) => prev + 1);
       return;
@@ -268,6 +297,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
     renderGradientFrame,
     renderMobileFrame,
     canvasInstanceKey,
+    active,
   ]);
 
   // Sync colors, playing state, and cover image to the worker

@@ -7,7 +7,8 @@ type WorkerCommand =
   | { type: "colors"; colors: string[] }
   | { type: "play"; isPlaying: boolean }
   | { type: "pause"; paused: boolean }
-  | { type: "coverImage"; imageData: ImageBitmap };
+  | { type: "coverImage"; imageData: ImageBitmap }
+  | { type: "dispose" };
 
 export class WebWorkerBackgroundRender extends BaseBackgroundRender {
   private canvas: HTMLCanvasElement;
@@ -45,10 +46,16 @@ export class WebWorkerBackgroundRender extends BaseBackgroundRender {
   }
 
   stop() {
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
+    const worker = this.worker;
+    if (!worker) return;
+
+    this.worker = null;
+    try {
+      worker.postMessage({ type: "dispose" });
+    } catch (err) {
+      console.warn("Failed to release worker renderer cleanly", err);
     }
+    window.setTimeout(() => worker.terminate(), 100);
   }
 
   resize(width: number, height: number) {
@@ -82,13 +89,18 @@ export class WebWorkerBackgroundRender extends BaseBackgroundRender {
    * The bitmap is transferred (zero-copy) to the worker thread.
    */
   async setCoverImage(url: string) {
-    if (!this.worker) return;
+    const worker = this.worker;
+    if (!worker) return;
     try {
       const response = await fetch(url);
       const blob = await response.blob();
       const bitmap = await createImageBitmap(blob);
+      if (this.worker !== worker) {
+        bitmap.close();
+        return;
+      }
       const command: WorkerCommand = { type: "coverImage", imageData: bitmap };
-      this.worker.postMessage(command, [bitmap]);
+      worker.postMessage(command, [bitmap]);
     } catch (error) {
       console.warn("Failed to load cover image for worker renderer", error);
     }
