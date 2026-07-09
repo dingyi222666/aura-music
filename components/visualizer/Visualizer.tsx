@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { publishAudioLevel } from "@/services/audioLevelBridge";
+import { usePageActive } from "@/hooks/usePageActive";
 import audioProcessorUrl from "./AudioProcessor.ts?worker&url";
 
 interface VisualizerProps {
@@ -20,13 +21,16 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
     const workerRef = useRef<Worker | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+    const [key, setKey] = useState(0);
+    const active = usePageActive();
+    const enabled = isPlaying && active;
 
     // Effect 1: Audio Context and Worklet Initialization
     useEffect(() => {
-        if (!isPlaying) {
+        if (!enabled) {
             publishAudioLevel(0);
         }
-    }, [isPlaying]);
+    }, [enabled]);
 
     useEffect(() => {
         const initAudio = async () => {
@@ -40,7 +44,7 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
             }
             audioContextRef.current = ctx;
 
-            if (ctx.state === "suspended" && isPlaying) {
+            if (ctx.state === "suspended" && enabled) {
                 await ctx.resume();
             }
 
@@ -81,18 +85,18 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
             }
         };
 
-        if (isPlaying) {
+        if (enabled) {
             initAudio();
         }
 
         return () => {
             // Cleanup logic if needed
         };
-    }, [isPlaying, audioRef]);
+    }, [enabled, audioRef]);
 
     // Effect 2: Worker Initialization
     useEffect(() => {
-        if (!isPlaying) {
+        if (!enabled) {
             if (workerRef.current) {
                 workerRef.current.postMessage({ type: "DESTROY" });
                 workerRef.current.terminate();
@@ -106,6 +110,11 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
             return;
         }
 
+        if (canvasEl.dataset.offscreenTransferred === "true") {
+            setKey((prev) => prev + 1);
+            return;
+        }
+
         if (workerRef.current) {
             return;
         }
@@ -115,6 +124,9 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
             console.warn("Visualizer: OffscreenCanvas not available, skipping worker");
             return;
         }
+
+        let cancelled = false;
+        let raf = 0;
 
         try {
             const worker = new Worker(new URL("./VisualizerWorker.ts", import.meta.url), {
@@ -127,6 +139,7 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
             canvasEl.height = 80 * dpr;
 
             const offscreen = canvasEl.transferControlToOffscreen();
+            canvasEl.dataset.offscreenTransferred = "true";
 
             const channel = new MessageChannel();
 
@@ -147,12 +160,13 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
             );
 
             const sendPortToWorklet = () => {
+                if (cancelled) return;
                 if (workletNodeRef.current) {
                     workletNodeRef.current.port.postMessage({ type: "PORT", port: channel.port2 }, [
                         channel.port2
                     ]);
                 } else {
-                    requestAnimationFrame(sendPortToWorklet);
+                    raf = requestAnimationFrame(sendPortToWorklet);
                 }
             };
             sendPortToWorklet();
@@ -161,6 +175,10 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
         }
 
         return () => {
+            cancelled = true;
+            if (raf) {
+                cancelAnimationFrame(raf);
+            }
             if (workerRef.current) {
                 workerRef.current.postMessage({ type: "DESTROY" });
                 workerRef.current.terminate();
@@ -168,13 +186,14 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
             }
             publishAudioLevel(0);
         };
-    }, [isPlaying]);
+    }, [enabled, key]);
 
     if (!isPlaying) return <div className="h-10 w-full"></div>;
 
     return (
         <canvas
             ref={canvasRef}
+            key={key}
             className="w-full h-10 transition-opacity duration-500"
         />
     );

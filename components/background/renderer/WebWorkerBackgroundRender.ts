@@ -7,12 +7,19 @@ type WorkerCommand =
   | { type: "colors"; colors: string[] }
   | { type: "play"; isPlaying: boolean }
   | { type: "pause"; paused: boolean }
+  | { type: "snapshot"; id: number }
+  | { type: "watchFrame"; id: number }
   | { type: "coverImage"; imageData: ImageBitmap }
   | { type: "dispose" };
+
+type WorkerEvent =
+  | { type: "snapshot"; id: number; bitmap?: ImageBitmap | null }
+  | { type: "frame"; id: number };
 
 export class WebWorkerBackgroundRender extends BaseBackgroundRender {
   private canvas: HTMLCanvasElement;
   private worker: Worker | null = null;
+  private id = 0;
 
   constructor(canvas: HTMLCanvasElement, targetFps: number = 60) {
     super(targetFps);
@@ -56,6 +63,78 @@ export class WebWorkerBackgroundRender extends BaseBackgroundRender {
       console.warn("Failed to release worker renderer cleanly", err);
     }
     window.setTimeout(() => worker.terminate(), 100);
+  }
+
+  snapshot(timeout: number = 250) {
+    const worker = this.worker;
+    if (!worker) return Promise.resolve(null);
+
+    const id = ++this.id;
+    return new Promise<ImageBitmap | null>((resolve) => {
+      let timer = 0;
+      let done = false;
+
+      const finish = (bitmap: ImageBitmap | null) => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        worker.removeEventListener("message", listen);
+        resolve(bitmap);
+      };
+
+      const listen = (event: MessageEvent<WorkerEvent>) => {
+        const data = event.data;
+        if (data?.type !== "snapshot" || data.id !== id) return;
+        finish(data.bitmap ?? null);
+      };
+
+      timer = window.setTimeout(() => finish(null), timeout);
+      worker.addEventListener("message", listen);
+
+      try {
+        const command: WorkerCommand = { type: "snapshot", id };
+        worker.postMessage(command);
+      } catch (err) {
+        console.warn("Failed to capture worker renderer frame", err);
+        finish(null);
+      }
+    });
+  }
+
+  waitFrame(timeout: number = 1000) {
+    const worker = this.worker;
+    if (!worker) return Promise.resolve(false);
+
+    const id = ++this.id;
+    return new Promise<boolean>((resolve) => {
+      let timer = 0;
+      let done = false;
+
+      const finish = (ok: boolean) => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        worker.removeEventListener("message", listen);
+        resolve(ok);
+      };
+
+      const listen = (event: MessageEvent<WorkerEvent>) => {
+        const data = event.data;
+        if (data?.type !== "frame" || data.id !== id) return;
+        finish(true);
+      };
+
+      timer = window.setTimeout(() => finish(false), timeout);
+      worker.addEventListener("message", listen);
+
+      try {
+        const command: WorkerCommand = { type: "watchFrame", id };
+        worker.postMessage(command);
+      } catch (err) {
+        console.warn("Failed to watch worker renderer frame", err);
+        finish(false);
+      }
+    });
   }
 
   resize(width: number, height: number) {

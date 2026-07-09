@@ -222,13 +222,14 @@ void main() {
 // ---------------------------------------------------------------------------
 
 interface WorkerCommand {
-  type: "init" | "resize" | "colors" | "play" | "pause" | "coverImage" | "dispose";
+  type: "init" | "resize" | "colors" | "play" | "pause" | "snapshot" | "watchFrame" | "coverImage" | "dispose";
   canvas?: OffscreenCanvas;
   width?: number;
   height?: number;
   colors?: string[];
   isPlaying?: boolean;
   paused?: boolean;
+  id?: number;
   imageData?: ImageBitmap;
 }
 
@@ -283,8 +284,10 @@ let currentColors = [...defaultColors];
 let rafId: number | null = null;
 let renderWidth = 0;
 let renderHeight = 0;
+let frameIds: number[] = [];
 
 const FRAME_INTERVAL = 1000 / 60;
+const FLOW_SPEED = 0.8;
 const BLUR_SIZE = 512;
 const BLUR_OFFSETS = [1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0];
 
@@ -649,15 +652,64 @@ const onNewColors = (colors: string[]) => {
   if (next) swapTex(next);
 };
 
+const capture = () => {
+  if (!gl) return null;
+
+  const canvas = gl.canvas as OffscreenCanvas;
+  const w = canvas.width;
+  const h = canvas.height;
+  if (w <= 0 || h <= 0) return null;
+
+  const data = new Uint8Array(w * h * 4);
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, data);
+
+  const row = w * 4;
+  const flipped = new Uint8ClampedArray(data.length);
+  for (let y = 0; y < h; y += 1) {
+    const src = (h - y - 1) * row;
+    const dest = y * row;
+    flipped.set(data.subarray(src, src + row), dest);
+  }
+
+  const copy = new OffscreenCanvas(w, h);
+  const ctx = copy.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.putImageData(new ImageData(flipped, w, h), 0, 0);
+  return copy.transferToImageBitmap();
+};
+
+const postSnapshot = (id: number | undefined) => {
+  if (typeof id !== "number" || !gl) {
+    self.postMessage({ type: "snapshot", id, bitmap: null });
+    return;
+  }
+
+  try {
+    render(performance.now(), true);
+    const bitmap = capture();
+    if (!bitmap) {
+      self.postMessage({ type: "snapshot", id, bitmap: null });
+      return;
+    }
+    self.postMessage({ type: "snapshot", id, bitmap }, [bitmap]);
+  } catch (err) {
+    console.warn("Failed to capture background frame", err);
+    self.postMessage({ type: "snapshot", id, bitmap: null });
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Render
 // ---------------------------------------------------------------------------
 
-const render = (now: number) => {
+const render = (now: number, force = false) => {
   if (!gl || !mainProg || !texA || !texB) return;
 
-  if (now - lastRenderTime < FRAME_INTERVAL) return;
-  lastRenderTime = now - ((now - lastRenderTime) % FRAME_INTERVAL);
+  if (!force && now - lastRenderTime < FRAME_INTERVAL) return;
+  if (!force) {
+    lastRenderTime = now - ((now - lastRenderTime) % FRAME_INTERVAL);
+  }
 
   const delta = now - lastFrameTime;
   lastFrameTime = now;
@@ -686,9 +738,15 @@ const render = (now: number) => {
 
   gl.uniform1f(mainU_mix, mixProgress);
   gl.uniform2f(mainU_resolution, gl.canvas.width, gl.canvas.height);
-  gl.uniform1f(mainU_time, t);
+  gl.uniform1f(mainU_time, t * FLOW_SPEED);
 
   drawQuad(mainProg);
+
+  if (frameIds.length > 0) {
+    const ids = frameIds;
+    frameIds = [];
+    ids.forEach((id) => self.postMessage({ type: "frame", id }));
+  }
 };
 
 const loop = (now: number) => {
@@ -706,6 +764,18 @@ self.onmessage = (event: MessageEvent<WorkerCommand>) => {
   if (data.type === "dispose") {
     dispose();
     self.close();
+    return;
+  }
+
+  if (data.type === "snapshot") {
+    postSnapshot(data.id);
+    return;
+  }
+
+  if (data.type === "watchFrame") {
+    if (typeof data.id === "number") {
+      frameIds.push(data.id);
+    }
     return;
   }
 
