@@ -27,10 +27,10 @@ View your app in AI Studio: https://ai.studio/apps/drive/1ggcfQNwQs0cGrbzb1oapyS
 ## Screenshot
 
 ![Focused artwork and lyrics](./images/screenshot-focus.webp)
-![Screenshot1](./images/screenshot1.png)
-![Screenshot2](./images/screenshot2.png)
-![Screenshot3](./images/screenshot3.png)
-![Screenshot4](./images/screenshot4.png)
+![Cruel Summer with translated lyrics](./images/screenshot1.webp)
+![After Hours with translated lyrics](./images/screenshot2.webp)
+![Current queue while playing 昔涟](./images/screenshot3.webp)
+![Keyboard shortcuts while playing 昔涟](./images/screenshot4.webp)
 
 > Shader source: https://www.shadertoy.com/view/wdyczG
 
