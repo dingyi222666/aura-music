@@ -95,6 +95,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
   }, [isPlaying]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       freezeRef.current += 1;
@@ -278,10 +279,8 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
               return;
             }
             drawSnapshot(bitmap);
-            if (rendererRef.current === renderer) {
-              renderer.stop();
-              rendererRef.current = null;
-            }
+            // Retain the mesh clock and artwork across tab visibility changes.
+            // The paused worker does not redraw until the page is visible again.
           });
         return;
       }
@@ -295,7 +294,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
       const renderer = rendererRef.current;
       if (renderer instanceof WebWorkerBackgroundRender) {
         renderer.setPlaying(isPlaying);
-        renderer.setPaused(!isPlaying);
+        renderer.setPaused(false);
         thaw();
         return;
       }
@@ -324,6 +323,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
       canvas.height = window.innerHeight;
       const workerRenderer = new WebWorkerBackgroundRender(canvas);
       workerRenderer.start(colorsRef.current ?? []);
+      workerRenderer.setPlaying(isPlayingRef.current);
 
       if (coverUrlRef.current) {
         workerRenderer.setCoverImage(coverUrlRef.current);
@@ -379,10 +379,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
   useEffect(() => {
     const renderer = rendererRef.current;
     if (!(renderer instanceof WebWorkerBackgroundRender)) return;
-    if (coverUrl) {
-      renderer.setCoverImage(coverUrl);
-      return;
-    }
+    renderer.setCoverImage(coverUrl ?? "");
   }, [coverUrl]);
 
   const canvasKey = `${isMobileLayout ? "mobile" : "desktop"}-${canvasInstanceKey}`;

@@ -1,7 +1,7 @@
 {
   "name": "aura-music",
   "private": true,
-  "version": "1.9.0",
+  "version": "1.10.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,6 @@
     "test": "bun test tests"
   },
   "dependencies": {
-    "@google/genai": "^1.30.0",
     "@react-spring/web": "^10.0.3",
     "colorthief": "^3.3.1",
     "fast-xml-parser": "^4.5.0",
@@ -25,6 +24,8 @@
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "vite-plugin-pwa": "^1.3.0"
+    "vite-plugin-pwa": "^1.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3"
   }
 }

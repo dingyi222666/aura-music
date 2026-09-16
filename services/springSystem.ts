@@ -1,178 +1,110 @@
-/**
- * Advanced Spring Physics System
- * Supports multiple properties (x, y, scale, etc.) simultaneously.
- */
-
 export interface SpringConfig {
   mass: number;
   stiffness: number;
   damping: number;
-  precision?: number; // Stop threshold
+  precision?: number;
+}
+
+export interface SpringState {
+  current: number;
+  target: number;
+  velocity: number;
 }
 
 export const DEFAULT_SPRING: SpringConfig = {
-  mass: 1,
-  stiffness: 120,
-  damping: 20,
-  precision: 0.01,
+  mass: 1, stiffness: 100, damping: 18, precision: 0.001,
 };
 
-export const POS_Y_SPRING: SpringConfig = {
-  mass: 0.9,
-  stiffness: 100,
-  damping: 20, // Critical ~19
-  precision: 0.1,
+export const LINE_SPRING: SpringConfig = {
+  ...DEFAULT_SPRING, precision: 0.05,
 };
 
-export const SCALE_SPRING: SpringConfig = {
-  mass: 2,
-  stiffness: 100,
-  damping: 28, // Increased damping
-  precision: 0.01,
+export const LIFT_SPRING: SpringConfig = {
+  mass: 1, stiffness: 14, damping: 7, precision: 0.001,
 };
 
-// --- Apple Music Style Physics Presets ---
-
-// Past lines: Very High stiffness.
-// When a line moves from Active -> Past, it should "snap" up out of the way quickly.
-export const PAST_SPRING: SpringConfig = {
-  mass: 1,
-  stiffness: 350, // Very stiff
-  damping: 45, // High damping to prevent bounce on the snap
-  precision: 0.1,
+export const PRESS_SPRING: SpringConfig = {
+  mass: 1, stiffness: 322, damping: 24, precision: 0.001,
 };
 
-// Current line: Fast arrival, responsive.
-export const ACTIVE_SPRING: SpringConfig = {
-  mass: 1,
-  stiffness: 220, // Fast response
-  damping: 30, // Critical damping
-  precision: 0.1,
+export const RELEASE_SPRING: SpringConfig = {
+  mass: 2, stiffness: 300, damping: 50, precision: 0.001,
 };
 
-// Future lines: Low stiffness (loose spring).
-// This creates the "drag" effect where they scroll slower than the active line.
-export const FUTURE_SPRING: SpringConfig = {
-  mass: 1.2,
-  stiffness: 70, // Soft/Loose spring
-  damping: 20, // Sufficient damping to avoid oscillation
-  precision: 0.1,
+// Exact solution of m*x'' + c*x' + k*(x-target) = 0 for a fixed target.
+// Retargeting keeps both position and velocity. All three damping regimes use
+// the same solver, independent of refresh rate or a single delayed frame.
+export const advance = (state: SpringState, config: SpringConfig, dt: number): boolean => {
+  if (!Number.isFinite(dt) || dt <= 0) return false;
+  if (state.current === state.target && state.velocity === 0) return false;
+  const a = config.damping / (2 * config.mass);
+  const k = config.stiffness / config.mass;
+  const d = a * a - k;
+  const x = state.current - state.target;
+  const v = state.velocity;
+  let position: number;
+  let velocity: number;
+  if (Math.abs(d) < 1e-8 * Math.max(1, k)) {
+    const decay = Math.exp(-a * dt);
+    const b = v + a * x;
+    position = decay * (x + b * dt);
+    velocity = decay * (v - a * b * dt);
+  } else if (d < 0) {
+    const w = Math.sqrt(-d);
+    const decay = Math.exp(-a * dt);
+    const c = Math.cos(w * dt);
+    const s = Math.sin(w * dt) / w;
+    position = decay * (x * c + (v + a * x) * s);
+    velocity = decay * (v * c - (a * v + k * x) * s);
+  } else {
+    const w = Math.sqrt(d);
+    const slow = -k / (a + w);
+    const fast = -a - w;
+    const b = (v - fast * x) / (slow - fast);
+    const c = x - b;
+    position = b * Math.exp(slow * dt) + c * Math.exp(fast * dt);
+    velocity = slow * b * Math.exp(slow * dt) + fast * c * Math.exp(fast * dt);
+  }
+  const precision = config.precision ?? 0.001;
+  const settled = Math.abs(position) <= precision && Math.abs(velocity) <= precision;
+  state.current = settled ? state.target : state.target + position;
+  state.velocity = settled ? 0 : velocity;
+  return !settled;
 };
 
-// Seek Spring: Faster than camera, but smooth
-export const SEEK_SPRING: SpringConfig = {
-  mass: 1,
-  stiffness: 180,
-  damping: 30,
-  precision: 0.1,
-};
+// A spring owns its state directly; no named channels or per-frame copies.
+export class Spring implements SpringState {
+  current: number;
+  target: number;
+  velocity = 0;
 
-// Camera Spring: Smooth global scrolling
-export const CAMERA_SPRING: SpringConfig = {
-  mass: 1,
-  stiffness: 150, // Tighter, faster response
-  damping: 34,    // Well over-damped (critical ≈ 24.5), minimal overshoot
-  precision: 0.1,
-};
-
-// Interlude Spring: Smooth expansion/collapse
-export const INTERLUDE_SPRING: SpringConfig = {
-  mass: 1.45,
-  stiffness: 40,
-  damping: 13,
-  precision: 0.001,
-};
-
-export class SpringSystem {
-  private current: Record<string, number> = {};
-  private target: Record<string, number> = {};
-  private velocity: Record<string, number> = {};
-  private config: Record<string, SpringConfig> = {};
-
-  constructor(initialValues: Record<string, number>) {
-    this.current = { ...initialValues };
-    this.target = { ...initialValues };
-    // Initialize velocities to 0
-    Object.keys(initialValues).forEach((k) => (this.velocity[k] = 0));
+  constructor(value: number, private config: SpringConfig = DEFAULT_SPRING) {
+    this.current = this.target = value;
   }
 
-  setTarget(key: string, value: number, config: SpringConfig = DEFAULT_SPRING) {
-    this.target[key] = value;
-    this.config[key] = config;
-    if (this.velocity[key] === undefined) this.velocity[key] = 0;
-    if (this.current[key] === undefined) this.current[key] = value;
+  set(value: number, config = this.config) {
+    this.target = value;
+    this.config = config;
   }
 
-  // Force a value immediately (reset)
-  setValue(key: string, value: number) {
-    this.current[key] = value;
-    this.target[key] = value;
-    this.velocity[key] = 0;
+  snap(value: number) {
+    this.current = this.target = value;
+    this.velocity = 0;
   }
 
-  // Inject momentum (e.g. scroll flick)
-  setVelocity(key: string, value: number) {
-    this.velocity[key] = value;
-  }
+  step(dt: number) { return advance(this, this.config, dt); }
 
-  getCurrent(key: string): number {
-    return this.current[key] || 0;
-  }
-
-  getTarget(key: string): number {
-    return this.target[key] || 0;
-  }
-
-  getVelocity(key: string): number {
-    return this.velocity[key] || 0;
-  }
-
-  isSettled(key: string): boolean {
-    const p = this.config[key] || DEFAULT_SPRING;
-    const cur = this.current[key] ?? 0;
-    const tar = this.target[key] ?? cur;
-    const vel = this.velocity[key] ?? 0;
-    const pre = p.precision ?? 0.001;
-    return Math.abs(cur - tar) < pre && Math.abs(vel) < pre;
-  }
-
-  update(dt: number): boolean {
-    let isMoving = false;
-
-    Object.keys(this.current).forEach((key) => {
-      const p = this.config[key] || DEFAULT_SPRING;
-      const current = this.current[key];
-      const target = this.target[key] ?? current;
-      const velocity = this.velocity[key] ?? 0;
-
-      // Spring Force Calculation (Hooke's Law + Damping)
-      // F = -k(x - target) - c(v)
-      const displacement = current - target;
-      const springForce = -p.stiffness * displacement;
-      const dampingForce = -p.damping * velocity;
-      const acceleration = (springForce + dampingForce) / p.mass;
-
-      const newVelocity = velocity + acceleration * dt;
-      const newPosition = current + newVelocity * dt;
-
-      const precision = p.precision ?? 0.001;
-
-      // Removed overshoot check which caused the snapping effect
-      // We rely on critical/over-damping and low velocity threshold
-      const isNearRest =
-        Math.abs(newVelocity) < precision &&
-        Math.abs(newPosition - target) < precision;
-
-      if (isNearRest) {
-        this.current[key] = target;
-        this.velocity[key] = 0;
-      } else {
-        this.current[key] = newPosition;
-        this.velocity[key] = newVelocity;
-        isMoving = true;
-      }
-    });
-
-    return isMoving;
+  get settled() {
+    const precision = this.config.precision ?? 0.001;
+    return Math.abs(this.current - this.target) <= precision && Math.abs(this.velocity) <= precision;
   }
 }
+
+// Sample a fresh spring by elapsed media time. Seeking and pausing give the
+// same word lift regardless of which frames were rendered before this one.
+export const liftAt = (elapsed: number) => {
+  if (elapsed <= 0) return 0;
+  const state = { current: 0, target: 1, velocity: 0 };
+  advance(state, LIFT_SPRING, elapsed);
+  return Math.max(0, Math.min(1, state.current));
+};

@@ -24,4 +24,9 @@ dist-ssr
 *.sw?
 
 tests/*
+!tests/mesh.test.ts
+!tests/timeline.test.ts
+!tests/spring.test.ts
+!tests/lyric_transition.test.ts
+!tests/lyrics_motion.test.ts
 bun.lock

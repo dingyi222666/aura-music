@@ -58,7 +58,7 @@ const PwaUpdatePrompt: React.FC = () => {
               ref={buttonRef}
               type="button"
               onClick={() => updateServiceWorker(true)}
-              className="flex-1 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-transform duration-150 hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-emerald-300/80 motion-reduce:transition-none motion-reduce:hover:scale-100"
+              className="flex-1 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-transform duration-150 hover:scale-[1.02] active:scale-[0.98] focus:outline-hidden focus:ring-2 focus:ring-emerald-300/80 motion-reduce:transition-none motion-reduce:hover:scale-100"
             >
               {dict.pwa.updateAction}
             </button>
@@ -66,7 +66,7 @@ const PwaUpdatePrompt: React.FC = () => {
           <button
             type="button"
             onClick={dismiss}
-            className="flex-1 rounded-2xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/50"
+            className="flex-1 rounded-2xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/15 focus:outline-hidden focus:ring-2 focus:ring-white/50"
           >
             {needRefresh ? dict.pwa.later : dict.pwa.close}
           </button>

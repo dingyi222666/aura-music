@@ -4,6 +4,7 @@ import { PlayState, Song } from "./types";
 import FluidBackground from "./components/FluidBackground";
 import Controls from "./components/Controls";
 import LyricsView from "./components/LyricsView";
+import LyricToggles from "./components/LyricToggles";
 import PlaylistPanel from "./components/PlaylistPanel";
 import KeyboardShortcuts from "./components/KeyboardShortcuts";
 import TopBar from "./components/TopBar";
@@ -15,6 +16,17 @@ import { useI18n } from "./hooks/useI18n";
 import { keyboardRegistry } from "./services/keyboardRegistry";
 import MediaSessionController from "./components/MediaSessionController";
 import { getThemeColor } from "./services/utils";
+
+const EMPTY_LYRICS: NonNullable<Song["lyrics"]> = [];
+
+const preference = (key: string, fallback = true) => {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value !== "false";
+  } catch {
+    return fallback;
+  }
+};
 
 const App: React.FC = () => {
   const { toast } = useToast();
@@ -53,6 +65,19 @@ const App: React.FC = () => {
     resolvedAudioSrc,
     isBuffering,
   } = player;
+
+  const [focused, setFocused] = useState(() => preference("aura.cover.focused", false));
+  const [visible, setVisible] = useState(() => preference("aura.lyrics.visible"));
+  const [translated, setTranslated] = useState(() => preference("aura.lyrics.translated"));
+  useEffect(() => {
+    try {
+      localStorage.setItem("aura.cover.focused", String(focused));
+      localStorage.setItem("aura.lyrics.visible", String(visible));
+      localStorage.setItem("aura.lyrics.translated", String(translated));
+    } catch (err) {
+      console.warn("Failed to save lyric preferences", err);
+    }
+  }, [visible, translated, focused]);
 
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -194,14 +219,14 @@ const App: React.FC = () => {
   }, [playlist.addSongs]);
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (!isMobileLayout) return;
+    if (!isMobileLayout || !visible) return;
     setTouchStartX(event.touches[0]?.clientX ?? null);
     setDragOffsetX(0);
     setIsDragging(true);
   };
 
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (!isMobileLayout || touchStartX === null) return;
+    if (!isMobileLayout || !visible || touchStartX === null) return;
     const currentX = event.touches[0]?.clientX;
     if (currentX === undefined) return;
     const deltaX = currentX - touchStartX;
@@ -214,7 +239,7 @@ const App: React.FC = () => {
   };
 
   const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (!isMobileLayout || touchStartX === null) return;
+    if (!isMobileLayout || !visible || touchStartX === null) return;
     const endX = event.changedTouches[0]?.clientX;
     if (endX === undefined) {
       setTouchStartX(null);
@@ -252,6 +277,7 @@ const App: React.FC = () => {
     <div className="flex flex-col items-center justify-center w-full h-full z-30 relative p-4">
       <div className="relative flex flex-col items-center gap-8 w-full max-w-[720px]">
         <Controls
+          focused={focused}
           isPlaying={playState === PlayState.PLAYING}
           onPlayPause={togglePlay}
           currentTime={currentTime}
@@ -297,26 +323,22 @@ const App: React.FC = () => {
     </div>
   );
 
-  const lyricsVersion = currentSong?.lyrics ? currentSong.lyrics.length : 0;
-  const lyricsKey = currentSong
-    ? `${currentSong.id}-${lyricsVersion}`
-    : "no-song";
-
   const lyricsSection = (
     <div className="w-full h-full relative z-20 flex flex-col justify-center px-4 lg:pl-12">
       <LyricsView
-        key={lyricsKey}
-        lyrics={currentSong?.lyrics || []}
+        key={currentSong?.id ?? "no-song"}
+        lyrics={currentSong?.lyrics ?? EMPTY_LYRICS}
         audioRef={audioRef}
-        isPlaying={playState === PlayState.PLAYING}
         currentTime={currentTime}
         onSeekRequest={handleSeek}
         matchStatus={matchStatus}
+        translated={translated}
+        enabled={visible && (!isMobileLayout || activePanel === "lyrics")}
       />
     </div>
   );
 
-  const shift = activePanel === "lyrics" ? "-50%" : "0px";
+  const shift = visible && activePanel === "lyrics" ? "-50%" : "0px";
   const transform = `translateX(calc(${shift} + ${dragOffsetX}px))`;
 
   return (
@@ -393,38 +415,51 @@ const App: React.FC = () => {
         accentColor={accentColor}
       />
 
-      {/* Main Content Split */}
-      {isMobileLayout ? (
-        <div className="flex-1 relative w-full h-full">
+      {/* Keep the player and lyric engine at stable positions in the React tree. */}
+      <div className="flex-1 min-h-0 relative w-full h-full">
+        <div
+          className="w-full h-full overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchCancel}
+        >
           <div
-            className="w-full h-full overflow-hidden"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            onTouchCancel={handleTouchCancel}
+            className={isMobileLayout
+              ? `flex h-full w-[200%] ${isDragging ? "transition-none" : "transition-transform duration-300"}`
+              : "relative h-full w-full"}
+            style={{ transform: isMobileLayout ? transform : undefined }}
           >
+            <div className={isMobileLayout
+              ? "flex-none h-full w-1/2"
+              : `h-full ${visible ? "w-1/2" : "w-full"}`}
+              style={{ transition: "width 420ms cubic-bezier(0.22, 1, 0.36, 1)" }}>
+              {controlsSection}
+            </div>
             <div
-              className={`flex h-full w-[200%] ${isDragging ? "transition-none" : "transition-transform duration-300"}`}
+              className={isMobileLayout
+                ? "flex-none h-full w-1/2"
+                : "absolute right-0 top-0 h-full w-1/2"}
               style={{
-                transform,
+                opacity: visible ? 1 : 0,
+                visibility: visible ? "visible" : "hidden",
+                transform: visible ? "translateY(0) scale(1)" : "translateY(14px) scale(0.985)",
+                transition: `opacity 280ms ease, transform 420ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s ${visible ? "0s" : "280ms"}`,
               }}
+              aria-hidden={!visible || (isMobileLayout && activePanel !== "lyrics")}
+              inert={!visible || (isMobileLayout && activePanel !== "lyrics")}
             >
-              <div className="flex-none h-full w-1/2">
-                {controlsSection}
-              </div>
-              <div className="flex-none h-full w-1/2">
-                {lyricsSection}
-              </div>
+              {lyricsSection}
             </div>
           </div>
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2">
+        </div>
+        {isMobileLayout && visible && (
+          <div className="absolute bottom-6 left-6 sm:left-1/2 sm:-translate-x-1/2">
             <button
               type="button"
               onClick={toggleIndicator}
               className="relative flex h-4 w-28 items-center justify-center rounded-full bg-white/10 backdrop-blur-2xl border border-white/15 transition-transform duration-200 active:scale-105"
-              style={{
-                transform: `translateX(${isDragging ? dragOffsetX * 0.04 : 0}px)`,
-              }}
+              style={{ transform: `translateX(${isDragging ? dragOffsetX * 0.04 : 0}px)` }}
             >
               <span
                 className={`absolute inset-0 rounded-full bg-white/25 backdrop-blur-[30px] transition-opacity duration-200 ${
@@ -433,13 +468,27 @@ const App: React.FC = () => {
               />
             </button>
           </div>
-        </div>
-      ) : (
-        <div className="flex-1 grid lg:grid-cols-2 w-full h-full">
-          {controlsSection}
-          {lyricsSection}
-        </div>
-      )}
+        )}
+      </div>
+      <LyricToggles
+        focused={focused}
+        onFocus={() => {
+          setFocused((value) => !value);
+          setShowPlaylist(false);
+          setShowVolumePopup(false);
+          setShowSettingsPopup(false);
+        }}
+        visible={visible}
+        translated={translated}
+        onTranslation={() => setTranslated((value) => !value)}
+        onLyrics={() => {
+          setVisible((value) => !value);
+          setActivePanel(visible ? "controls" : "lyrics");
+          setDragOffsetX(0);
+          setIsDragging(false);
+          setTouchStartX(null);
+        }}
+      />
     </div>
   );
 };

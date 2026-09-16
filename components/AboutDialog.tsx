@@ -29,7 +29,7 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
 
       {/* Shared backdrop */}
       <div
-        className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-300 pointer-events-auto"
+        className="absolute inset-0 bg-black/20 backdrop-blur-xs transition-opacity duration-300 pointer-events-auto"
         onClick={onClose}
       />
 
@@ -39,30 +39,30 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Decorative Gradient Blob */}
-        <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-gradient-to-b from-purple-500/10 via-transparent to-transparent pointer-events-none blur-3xl" />
+        <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-linear-to-b from-purple-500/10 via-transparent to-transparent pointer-events-none blur-3xl" />
 
         {/* Content */}
         <div className="relative p-8 flex flex-col items-center text-center z-10">
           {/* Logo Section */}
           <div className="relative group mb-6">
-            <div className="absolute inset-0 bg-gradient-to-tr from-purple-500 to-orange-500 rounded-[24px] blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-500" />
+            <div className="absolute inset-0 bg-linear-to-tr from-purple-500 to-orange-500 rounded-[24px] blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-500" />
             <div className="relative w-24 h-24 rounded-[24px] shadow-2xl overflow-hidden bg-black/20 ring-1 ring-white/10">
               <AuraLogo className="w-full h-full drop-shadow-lg" />
             </div>
           </div>
 
           {/* Title & Version */}
-          <h3 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-white/60 tracking-tight mb-1">
+          <h3 className="text-3xl font-bold text-transparent bg-clip-text bg-linear-to-br from-white via-white to-white/60 tracking-tight mb-1">
             Aura Music
           </h3>
           <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-medium text-white/40 tracking-wide uppercase mb-6">
-            v1.9.0
+            v1.10.0
           </div>
 
           {/* Description */}
           <p className="text-white/70 text-[15px] leading-relaxed mb-8 font-medium">
             {dict.about.descStart}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-bold mx-1">
+            <span className="text-transparent bg-clip-text bg-linear-to-r from-purple-400 to-pink-400 font-bold mx-1">
               {dict.about.descEmphasis}
             </span>
             {dict.about.descEnd}

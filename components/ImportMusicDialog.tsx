@@ -46,7 +46,7 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
       onClick={handleClose}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"></div>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in duration-300"></div>
 
       {/* Modal */}
       <div
@@ -75,7 +75,7 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
             value={importUrl}
             onChange={(e) => setImportUrl(e.target.value)}
             placeholder={dict.import.placeholder}
-            className="w-full mt-5 bg-white/10 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white/10 transition-all text-[15px]"
+            className="w-full mt-5 bg-white/10 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/20 focus:outline-hidden focus:ring-2 focus:ring-blue-500/50 focus:bg-white/10 transition-all text-[15px]"
             disabled={isLoading}
             autoFocus
             onKeyDown={(e) => {

@@ -110,7 +110,7 @@ const TopBar: React.FC<TopBarProps> = ({
       <div className="relative z-10 w-full h-full px-6 flex justify-between items-center pointer-events-none">
         {/* Logo / Title */}
         <div className={`flex items-center gap-3 ${baseTransitionClasses} ${childClasses}`}>
-          <div className="w-9 h-9 rounded-[10px] overflow-hidden shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-white/10 flex-shrink-0">
+          <div className="w-9 h-9 rounded-[10px] overflow-hidden shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-white/10 shrink-0">
             <AuraLogo className="w-full h-full" />
           </div>
           <span className="text-white/90 font-semibold tracking-tight text-[15px] hidden sm:block">

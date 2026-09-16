@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { usePageActive } from "./usePageActive";
 
 interface UseCanvasRendererProps {
+    enabled?: boolean;
     onRender: (
         ctx: CanvasRenderingContext2D,
         width: number,
@@ -10,7 +11,7 @@ interface UseCanvasRendererProps {
     ) => void;
 }
 
-export const useCanvasRenderer = ({ onRender }: UseCanvasRendererProps) => {
+export const useCanvasRenderer = ({ onRender, enabled = true }: UseCanvasRendererProps) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef<number>(0);
     const previousTimeRef = useRef<number | undefined>(0);
@@ -24,7 +25,7 @@ export const useCanvasRenderer = ({ onRender }: UseCanvasRendererProps) => {
     });
 
     useEffect(() => {
-        if (!active) {
+        if (!active || !enabled) {
             previousTimeRef.current = undefined;
             return;
         }
@@ -40,7 +41,8 @@ export const useCanvasRenderer = ({ onRender }: UseCanvasRendererProps) => {
             const parent = canvas.parentElement;
             if (parent) {
                 const dpr = window.devicePixelRatio || 1;
-                const rect = parent.getBoundingClientRect();
+                const rect = { width: parent.clientWidth, height: parent.clientHeight };
+                if (rect.width <= 0 || rect.height <= 0) return;
 
                 // Only resize if dimensions actually changed to avoid flicker
                 if (
@@ -60,6 +62,8 @@ export const useCanvasRenderer = ({ onRender }: UseCanvasRendererProps) => {
 
         // Initial resize
         handleResize();
+        const observer = new ResizeObserver(handleResize);
+        if (canvas.parentElement) observer.observe(canvas.parentElement);
         window.addEventListener("resize", handleResize);
 
         const animate = (time: number) => {
@@ -83,10 +87,11 @@ export const useCanvasRenderer = ({ onRender }: UseCanvasRendererProps) => {
         requestRef.current = requestAnimationFrame(animate);
 
         return () => {
+            observer.disconnect();
             window.removeEventListener("resize", handleResize);
             cancelAnimationFrame(requestRef.current);
         };
-    }, [active]);
+    }, [active, enabled]);
 
     return canvasRef;
 };

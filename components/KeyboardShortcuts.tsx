@@ -161,7 +161,7 @@ return createPortal(
 
     {/* Shared backdrop */}
     <div
-      className={`absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-300 pointer-events-auto ${isOpen ? "opacity-100" : "opacity-0"}`}
+      className={`absolute inset-0 bg-black/20 backdrop-blur-xs transition-opacity duration-300 pointer-events-auto ${isOpen ? "opacity-100" : "opacity-0"}`}
       onClick={() => setIsOpen(false)}
     />
 
@@ -251,7 +251,7 @@ const ShortcutItem = ({ keys, label }: { keys: string[]; label: string }) => (
       {keys.map((k, i) => (
         <kbd
           key={i}
-          className="min-w-[28px] h-7 px-2 flex items-center justify-center bg-white/10 border border-white/5 rounded-[8px] text-sm font-semibold text-white/90 shadow-sm"
+          className="min-w-[28px] h-7 px-2 flex items-center justify-center bg-white/10 border border-white/5 rounded-[8px] text-sm font-semibold text-white/90 shadow-xs"
         >
           {k}
         </kbd>

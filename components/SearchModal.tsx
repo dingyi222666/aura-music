@@ -263,7 +263,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
 
       {/* Backdrop - Animated */}
       <div
-        className={`absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-300 ${isClosing ? "opacity-0" : "opacity-100"}`}
+        className={`absolute inset-0 bg-black/20 backdrop-blur-xs transition-opacity duration-300 ${isClosing ? "opacity-0" : "opacity-100"}`}
         aria-hidden="true"
       />
 
@@ -338,7 +338,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
                         border border-white/5 focus:border-white/15
                         rounded-[12px]
                         text-lg font-medium text-white placeholder:text-white/20
-                        outline-none
+                        outline-hidden
                         transition-all duration-200
                         shadow-inner
                     "
@@ -390,7 +390,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
                                         ${search.selectedIndex === idx ? "text-white" : "hover:bg-white/5 hover:transition-colors hover:duration-150 text-white/90"}
                                     `}
                       >
-                        <div className="relative w-10 h-10 rounded-[6px] bg-white/5 overflow-hidden shrink-0 shadow-sm group-hover:shadow-lg transition-shadow duration-200">
+                        <div className="relative w-10 h-10 rounded-[6px] bg-white/5 overflow-hidden shrink-0 shadow-xs group-hover:shadow-lg transition-shadow duration-200">
                           {s.coverUrl ? (
                             <SmartImage
                               src={s.coverUrl}
@@ -532,7 +532,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
                                         ${search.selectedIndex === idx ? "text-white" : "hover:bg-white/5 hover:transition-colors hover:duration-150 text-white/90"}
                                     `}
                       >
-                        <div className="relative w-10 h-10 rounded-[6px] bg-white/5 overflow-hidden shrink-0 shadow-sm group-hover:shadow-lg transition-shadow duration-200">
+                        <div className="relative w-10 h-10 rounded-[6px] bg-white/5 overflow-hidden shrink-0 shadow-xs group-hover:shadow-lg transition-shadow duration-200">
                           {track.coverUrl && (
                             <SmartImage
                               src={track.coverUrl}

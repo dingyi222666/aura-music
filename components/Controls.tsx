@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useSpring, animated, useTransition, to } from "@react-spring/web";
 import { formatTime } from "../services/utils";
 import { useI18n } from "../hooks/useI18n";
@@ -25,6 +25,7 @@ import {
 import { PlayMode } from "../types";
 
 interface ControlsProps {
+  focused: boolean;
   isPlaying: boolean;
   onPlayPause: () => void;
   currentTime: number;
@@ -56,6 +57,7 @@ interface ControlsProps {
 }
 
 const Controls: React.FC<ControlsProps> = ({
+  focused,
   isPlaying,
   onPlayPause,
   currentTime,
@@ -185,7 +187,7 @@ const Controls: React.FC<ControlsProps> = ({
       setInterpolatedTime(currentTime);
     }
 
-    if (!isPlaying) return;
+    if (!isPlaying || focused) return;
 
     let animationFrameId: number;
 
@@ -216,7 +218,7 @@ const Controls: React.FC<ControlsProps> = ({
     animationFrameId = requestAnimationFrame(animate);
 
     return () => cancelAnimationFrame(animationFrameId);
-  }, [currentTime, isPlaying, isSeeking, speed, duration, isWaitingForSeek]);
+  }, [currentTime, isPlaying, isSeeking, speed, duration, isWaitingForSeek, focused]);
 
   // Update buffered time range from audio element
   useEffect(() => {
@@ -388,6 +390,22 @@ const Controls: React.FC<ControlsProps> = ({
 
   const { ref: fitRef, height: fitHeight, scale: fitScale } = useFitScale<HTMLDivElement>();
 
+  const details = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState(0);
+  useLayoutEffect(() => {
+    const element = details.current;
+    if (!element) return;
+    const measure = () => setOffset((element.offsetHeight + 40) / 2);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const focus = useSpring({
+    y: focused ? offset : 0,
+    config: { tension: 150, friction: 24 },
+  });
+
   return (
     <div
       className="w-full max-w-[480px] mx-auto"
@@ -401,30 +419,46 @@ const Controls: React.FC<ControlsProps> = ({
           transformOrigin: "top center",
         }}
       >
-        {/* Cover Section */}
-        <animated.div
-          style={{
-            boxShadow: coverSpring.boxShadow,
-            transform: coverScaleSpring.scale.to((s) => `scale(${s})`),
-          }}
-          className="relative aspect-square w-full rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 overflow-hidden mb-10"
-        >
-          {coverUrl ? (
-            <SmartImage
-              src={coverUrl}
-              alt={dict.controls.albumArt}
-              containerClassName="absolute inset-0 overflow-hidden"
-              imgClassName="absolute inset-0 block w-full h-full object-cover"
-              loading="eager"
-            />
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-white/20">
-              <div className="text-8xl mb-4">♪</div>
-              <p className="text-sm">{dict.controls.noMusic}</p>
-            </div>
-          )}
-        </animated.div>
+        {/* Keep the measured layout stable while moving only the artwork. */}
+          <animated.div
+            className="w-full mb-10 relative z-10"
+            style={{ transform: focus.y.to((y) => `translateY(${y}px)`) }}
+          >
+          <animated.div
+            style={{
+              boxShadow: coverSpring.boxShadow,
+              transform: coverScaleSpring.scale.to((s) => `scale(${s})`),
+            }}
+            className="relative aspect-square w-full rounded-2xl bg-linear-to-br from-gray-800 to-gray-900 overflow-hidden"
+          >
+            {coverUrl ? (
+              <SmartImage
+                src={coverUrl}
+                alt={dict.controls.albumArt}
+                containerClassName="absolute inset-0 overflow-hidden"
+                imgClassName="absolute inset-0 block w-full h-full object-cover"
+                loading="eager"
+              />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-white/20">
+                <div className="text-8xl mb-4">♪</div>
+                <p className="text-sm">{dict.controls.noMusic}</p>
+              </div>
+            )}
+          </animated.div>
 
+        </animated.div>
+      <div
+        ref={details}
+        className="w-full flex flex-col items-center"
+        aria-hidden={focused}
+        inert={focused}
+        style={{
+          opacity: focused ? 0 : 1,
+          visibility: focused ? "hidden" : "visible",
+          transition: `opacity ${focused ? 180 : 300}ms ease, visibility 0s ${focused ? "180ms" : "0s"}`,
+        }}
+      >
       {/* Song Info */}
       <div className="w-full flex items-center justify-between mb-8 px-1">
         <div className="flex flex-col items-start overflow-hidden pr-4 max-w-[85%] select-text">
@@ -438,7 +472,7 @@ const Controls: React.FC<ControlsProps> = ({
         <div className="relative" ref={settingsContainerRef}>
           <button
             onClick={() => setShowSettingsPopup(!showSettingsPopup)}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition-all outline-none flex-shrink-0"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition-all outline-hidden shrink-0"
             title={dict.controls.settings}
           >
             <div className="flex gap-[3px]">
@@ -465,7 +499,7 @@ const Controls: React.FC<ControlsProps> = ({
 
       {/* Visualizer */}
       <div className="w-full flex justify-center h-10 mb-4 opacity-40 px-1">
-        <Visualizer audioRef={audioRef} isPlaying={isPlaying} />
+        <Visualizer audioRef={audioRef} isPlaying={isPlaying && !focused} />
       </div>
 
       {/* Progress Bar */}
@@ -494,7 +528,7 @@ const Controls: React.FC<ControlsProps> = ({
             value={displayTime}
             onPointerDown={startSeek}
             onInput={(e) => {
-              const time = parseFloat(e.target.value);
+              const time = parseFloat(e.currentTarget.value);
               dragSeek(time);
             }}
             onChange={(e) => {
@@ -523,7 +557,7 @@ const Controls: React.FC<ControlsProps> = ({
       <div className="w-full flex items-center justify-between mb-8 px-0">
         <button
           onClick={onToggleMode}
-          className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-none"
+          className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-hidden"
           title={dict.controls.playback}
         >
           {getModeIcon()}
@@ -531,15 +565,16 @@ const Controls: React.FC<ControlsProps> = ({
 
         <button
           onClick={onPrev}
-          className="text-white hover:bg-white/10 rounded-full p-2.5 transition-colors active:bg-white/20 outline-none flex items-center justify-center transform active:scale-95"
+          className="text-white hover:bg-white/10 rounded-full p-2.5 transition-colors active:bg-white/20 outline-hidden flex items-center justify-center transform active:scale-95"
           aria-label={dict.controls.previous}
         >
-          <PrevIcon className="w-8 h-8 fill-current" />
+          <PrevIcon className="w-9 h-7 fill-current" />
         </button>
 
         <button
           onClick={onPlayPause}
-          className="relative flex items-center justify-center p-3 hover:bg-white/10 rounded-full active:bg-white/20 transition-all outline-none transform active:scale-95 text-white"
+          aria-label={dict.keys.playPause}
+          className="relative flex items-center justify-center p-3 hover:bg-white/10 rounded-full active:bg-white/20 transition-all outline-hidden transform active:scale-95 text-white"
         >
           <div className="relative w-10 h-10 flex items-center justify-center">
             <PauseIcon
@@ -555,16 +590,16 @@ const Controls: React.FC<ControlsProps> = ({
 
         <button
           onClick={onNext}
-          className="text-white hover:bg-white/10 rounded-full p-2.5 transition-colors active:bg-white/20 outline-none flex items-center justify-center transform active:scale-95"
+          className="text-white hover:bg-white/10 rounded-full p-2.5 transition-colors active:bg-white/20 outline-hidden flex items-center justify-center transform active:scale-95"
           aria-label={dict.controls.next}
         >
-          <NextIcon className="w-8 h-8 fill-current" />
+          <NextIcon className="w-9 h-7 fill-current" />
         </button>
 
         <div className="relative flex items-center justify-center">
           <button
             onClick={onTogglePlaylist}
-            className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-none"
+            className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-hidden"
             title={dict.controls.queue}
           >
             <QueueIcon className="w-6 h-6 fill-current" />
@@ -575,7 +610,7 @@ const Controls: React.FC<ControlsProps> = ({
 
       {/* Inline Volume Slider */}
       <div className="w-full flex items-center gap-3 group/vol mb-2 px-1 mt-2">
-        <VolumeLowIcon className="w-3.5 h-3.5 text-white/60 fill-current" />
+        <VolumeMuteIcon className="w-4 h-4 text-white/60 fill-current" />
         <div className="relative flex-1 h-2 flex items-center cursor-pointer">
           <div className="absolute inset-x-0 h-1 bg-white/20 rounded-full group-hover/vol:h-2 transition-[height] duration-200"></div>
           <div
@@ -589,11 +624,12 @@ const Controls: React.FC<ControlsProps> = ({
             step={0.01}
             value={volume}
             onInput={(e) => onVolumeChange(parseFloat((e.target as HTMLInputElement).value))}
-            onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+            onChange={(e) => onVolumeChange(parseFloat(e.currentTarget.value))}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 touch-none"
           />
         </div>
-        <VolumeHighIcon className="w-3.5 h-3.5 text-white/60 fill-current" />
+        <VolumeHighIcon className="w-5 h-5 text-white/60 fill-current" />
+      </div>
       </div>
       </div>
     </div>
@@ -639,7 +675,7 @@ const VolumePopup: React.FC<VolumePopupProps> = ({
           max="1"
           step="0.01"
           value={volume}
-          onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+          onChange={(e) => onVolumeChange(parseFloat(e.currentTarget.value))}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-none"
           style={
             {
@@ -699,7 +735,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({
             max="2"
             step="0.01"
             value={speed}
-            onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
+            onChange={(e) => onSpeedChange(parseFloat(e.currentTarget.value))}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-none"
             style={{
               WebkitAppearance: "slider-vertical",

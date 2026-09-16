@@ -103,14 +103,14 @@ const HOLD_SLOP = 10;
 const Art = React.memo(({ src, alt, dim = false, eager = false }: ArtProps) => {
   if (!src) {
     return (
-      <div className="relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-lg border border-white/5 bg-gray-800 shadow-sm">
+      <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-white/5 bg-gray-800 shadow-xs">
         <div className="flex h-full w-full items-center justify-center bg-gray-700 text-[10px] text-white/20">♪</div>
       </div>
     );
   }
 
   return (
-    <div className="relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-lg border border-white/5 bg-gray-800 shadow-sm">
+    <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-white/5 bg-gray-800 shadow-xs">
       <img
         src={src}
         alt={alt}

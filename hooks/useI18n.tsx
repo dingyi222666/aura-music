@@ -72,6 +72,15 @@ interface Dict {
     close: string;
   };
   lyrics: {
+    focus: string;
+    showControls: string;
+    hideControls: string;
+    translation: string;
+    visibility: string;
+    showTranslation: string;
+    hideTranslation: string;
+    showLyrics: string;
+    hideLyrics: string;
     syncing: string;
     empty: string;
   };
@@ -186,6 +195,15 @@ export const dicts: Record<Lang, Dict> = {
       close: "to close",
     },
     lyrics: {
+      focus: "Focus artwork",
+      showControls: "Show player controls",
+      hideControls: "Hide player controls",
+      translation: "Translation",
+      visibility: "Lyrics",
+      showTranslation: "Show translation",
+      hideTranslation: "Hide translation",
+      showLyrics: "Show lyrics",
+      hideLyrics: "Hide lyrics",
       syncing: "Syncing Lyrics...",
       empty: "Play music to view lyrics",
     },
@@ -299,6 +317,15 @@ export const dicts: Record<Lang, Dict> = {
       close: "关闭",
     },
     lyrics: {
+      focus: "专注封面",
+      showControls: "显示播放控制",
+      hideControls: "隐藏播放控制",
+      translation: "翻译",
+      visibility: "歌词",
+      showTranslation: "显示翻译",
+      hideTranslation: "隐藏翻译",
+      showLyrics: "显示歌词",
+      hideLyrics: "隐藏歌词",
       syncing: "歌词同步中...",
       empty: "播放音乐以查看歌词",
     },

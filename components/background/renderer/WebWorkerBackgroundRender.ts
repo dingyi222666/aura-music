@@ -1,3 +1,4 @@
+import { subscribeAudioLevel } from "@/services/audioLevelBridge";
 import { BaseBackgroundRender } from "./BaseBackgroundRender";
 import backgroundWorkerUrl from "./webWorkerBackground.worker.ts?worker&url";
 
@@ -6,10 +7,12 @@ type WorkerCommand =
   | { type: "resize"; width: number; height: number }
   | { type: "colors"; colors: string[] }
   | { type: "play"; isPlaying: boolean }
+  | { type: "audio"; level: number }
   | { type: "pause"; paused: boolean }
   | { type: "snapshot"; id: number }
   | { type: "watchFrame"; id: number }
   | { type: "coverImage"; imageData: ImageBitmap }
+  | { type: "clearCover" }
   | { type: "dispose" };
 
 type WorkerEvent =
@@ -20,6 +23,9 @@ export class WebWorkerBackgroundRender extends BaseBackgroundRender {
   private canvas: HTMLCanvasElement;
   private worker: Worker | null = null;
   private id = 0;
+  private request = 0;
+  private controller: AbortController | null = null;
+  private unlisten: (() => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, targetFps: number = 60) {
     super(targetFps);
@@ -46,14 +52,23 @@ export class WebWorkerBackgroundRender extends BaseBackgroundRender {
         colors,
       };
       this.worker.postMessage(command, [offscreen]);
+      this.unlisten = subscribeAudioLevel((level) => {
+        this.worker?.postMessage({ type: "audio", level });
+      });
     } catch (error) {
       console.error("Failed to initialize web worker renderer", error);
+      this.worker?.terminate();
       this.worker = null;
     }
   }
 
   stop() {
     const worker = this.worker;
+    this.request++;
+    this.controller?.abort();
+    this.controller = null;
+    this.unlisten?.();
+    this.unlisten = null;
     if (!worker) return;
 
     this.worker = null;
@@ -164,24 +179,36 @@ export class WebWorkerBackgroundRender extends BaseBackgroundRender {
   }
 
   /**
-   * Send a cover image to the worker as an ImageBitmap for GPU texture upload.
+   * Send the complete artwork for blur and texture mapping onto the mesh.
    * The bitmap is transferred (zero-copy) to the worker thread.
    */
   async setCoverImage(url: string) {
     const worker = this.worker;
     if (!worker) return;
+    const request = ++this.request;
+    this.controller?.abort();
+    this.controller = new AbortController();
+    if (!url) {
+      worker.postMessage({ type: "clearCover" });
+      return;
+    }
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: this.controller.signal });
+      if (!response.ok) throw new Error(`Artwork HTTP ${response.status}`);
       const blob = await response.blob();
       const bitmap = await createImageBitmap(blob);
-      if (this.worker !== worker) {
+      if (this.worker !== worker || this.request !== request) {
         bitmap.close();
         return;
       }
       const command: WorkerCommand = { type: "coverImage", imageData: bitmap };
       worker.postMessage(command, [bitmap]);
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       console.warn("Failed to load cover image for worker renderer", error);
+      if (this.worker === worker && this.request === request) {
+        worker.postMessage({ type: "clearCover" });
+      }
     }
   }
 
@@ -189,7 +216,9 @@ export class WebWorkerBackgroundRender extends BaseBackgroundRender {
    * Send a pre-created ImageBitmap directly (avoids double-fetch if caller already has it).
    */
   setCoverBitmap(bitmap: ImageBitmap) {
-    if (!this.worker) return;
+    this.request++;
+    this.controller?.abort();
+    if (!this.worker) { bitmap.close(); return; }
     const command: WorkerCommand = { type: "coverImage", imageData: bitmap };
     this.worker.postMessage(command, [bitmap]);
   }
