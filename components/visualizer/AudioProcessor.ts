@@ -1,4 +1,7 @@
 // AudioProcessor.ts (AudioWorklet)
+import { Envelope } from "@/services/audioEnvelope";
+
+declare const sampleRate: number;
 
 interface AudioWorkletProcessor {
   readonly port: MessagePort;
@@ -20,17 +23,14 @@ declare function registerProcessor(
 ): void;
 
 class AudioProcessor extends AudioWorkletProcessor {
-  private static readonly window = 2048;
-
   private port2: MessagePort | null = null;
-  private size = 0;
-  private sum = 0;
-  private peak = 0;
+  private readonly envelope = new Envelope(sampleRate);
 
   constructor() {
     super();
     this.port.onmessage = (event) => {
       if (event.data.type !== "PORT") return;
+      this.port2?.close();
       this.port2 = event.data.port;
       this.port.postMessage({ type: "PORT_RECEIVED" });
     };
@@ -52,27 +52,8 @@ class AudioProcessor extends AudioWorkletProcessor {
       this.port2.postMessage({ type: "AUDIO_DATA", data: copy }, [copy.buffer]);
     }
 
-    for (let i = 0; i < data.length; i++) {
-      const value = data[i] ?? 0;
-      const abs = Math.abs(value);
-      this.sum += value * value;
-      if (abs > this.peak) {
-        this.peak = abs;
-      }
-    }
-
-    this.size += data.length;
-    if (this.size < AudioProcessor.window) {
-      return true;
-    }
-
-    const rms = Math.sqrt(this.sum / this.size);
-    const level = Math.min(1, Math.max(rms * 2.8, this.peak * 0.9));
-    this.port.postMessage({ type: "LEVEL", level, rms, peak: this.peak });
-
-    this.size = 0;
-    this.sum = 0;
-    this.peak = 0;
+    const envelope = this.envelope.push(data);
+    if (envelope) this.port.postMessage({ type: "LEVEL", ...envelope });
     return true;
   }
 }

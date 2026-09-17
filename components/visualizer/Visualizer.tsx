@@ -6,6 +6,7 @@ import audioProcessorUrl from "./AudioProcessor.ts?worker&url";
 interface VisualizerProps {
     audioRef: React.RefObject<HTMLAudioElement>;
     isPlaying: boolean;
+    visible?: boolean;
 }
 
 // Global map to store source nodes to prevent "MediaElementAudioSourceNode" double-connection errors
@@ -16,7 +17,7 @@ const BAR_COUNT = 96;
 const FFT_SIZE = 1024;
 const BAR_GAP = 4;
 
-const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
+const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying, visible = true }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const workerRef = useRef<Worker | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -24,6 +25,9 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
     const [key, setKey] = useState(0);
     const active = usePageActive();
     const enabled = isPlaying && active;
+    const displayed = enabled && visible;
+    const enabledRef = useRef(enabled);
+    enabledRef.current = enabled;
 
     // Effect 1: Audio Context and Worklet Initialization
     useEffect(() => {
@@ -58,11 +62,14 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
 
                     const workletNode = new AudioWorkletNode(ctx, "audio-processor");
                     workletNode.port.onmessage = (e) => {
-                        if (e.data?.type === "LEVEL" && typeof e.data.level === "number") {
-                            publishAudioLevel(e.data.level);
+                        if (enabledRef.current && e.data?.type === "LEVEL" && typeof e.data.level === "number") {
+                            publishAudioLevel(e.data.level, e.data.bass, e.data.onset);
                         }
                     };
                     workletNodeRef.current = workletNode;
+                    // The analysis output is silent; keep it attached so the
+                    // worklet remains pulled even while the bars are hidden.
+                    workletNode.connect(ctx.destination);
                     console.log("Visualizer: AudioWorkletNode created.");
 
                     // Connect Source -> Worklet -> Destination
@@ -96,7 +103,7 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
 
     // Effect 2: Worker Initialization
     useEffect(() => {
-        if (!enabled) {
+        if (!displayed) {
             if (workerRef.current) {
                 workerRef.current.postMessage({ type: "DESTROY" });
                 workerRef.current.terminate();
@@ -176,6 +183,7 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
 
         return () => {
             cancelled = true;
+            workletNodeRef.current?.port.postMessage({ type: "PORT", port: null });
             if (raf) {
                 cancelAnimationFrame(raf);
             }
@@ -184,11 +192,10 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying }) => {
                 workerRef.current.terminate();
                 workerRef.current = null;
             }
-            publishAudioLevel(0);
         };
-    }, [enabled, key]);
+    }, [displayed, key]);
 
-    if (!isPlaying) return <div className="h-10 w-full"></div>;
+    if (!isPlaying || !visible) return <div className="h-10 w-full"></div>;
 
     return (
         <canvas

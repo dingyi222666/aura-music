@@ -10,9 +10,9 @@ test("adjacent cubic patches agree in value and first derivative", () => {
         const coords = axis ? [t, seam] : [seam, t];
         const before = [...coords]; before[axis] -= epsilon;
         const after = [...coords]; after[axis] += epsilon;
-        const a = sample(data, 2, before[0], before[1]);
-        const b = sample(data, 2, coords[0], coords[1]);
-        const c = sample(data, 2, after[0], after[1]);
+        const a = sample(data, before[0], before[1]);
+        const b = sample(data, coords[0], coords[1]);
+        const c = sample(data, after[0], after[1]);
         for (let i = 0; i < 2; i++) {
           expect(Math.abs(a[i] - c[i])).toBeLessThan(0.0001);
           expect(Math.abs((b[i] - a[i]) / epsilon - (c[i] - b[i]) / epsilon)).toBeLessThan(0.006);
@@ -25,7 +25,7 @@ test("adjacent cubic patches agree in value and first derivative", () => {
 test("animated patches do not fold or expose the canvas edges", () => {
   const mesh = new Mesh();
   const colors = palette([[0.8, 0.05, 0.02], [0.1, 0.3, 0.12]]);
-  for (let t = 0; t < 180; t += 0.73) {
+  for (let t = 0; t < 3600; t += 1.7) {
     mesh.update(points(t, 1), colors);
     const data = mesh.vertices;
     for (let i = 0; i < mesh.indices.length; i += 3) {
@@ -81,4 +81,35 @@ test("cover processing preserves neutral hues and handles transparent artwork", 
   const output = prepare(input, 32);
   expect(output[0]).toBe(0);
   expect(output[3]).toBe(255);
+});
+
+test("separable interpolation matches the cubic surface at boundaries and interiors", () => {
+  const mesh = new Mesh();
+  const positions = points(37.5, 0.65);
+  const colors = Float32Array.from({ length: SIZE * SIZE * 3 }, (_, i) => (Math.sin(i * 1.7) + 1) / 2);
+  mesh.update(positions, colors);
+  for (const y of [0, 1, 7, 8, 19, SIDE - 2, SIDE - 1]) {
+    for (const x of [0, 1, 7, 8, 23, SIDE - 2, SIDE - 1]) {
+      const u = x / (SIDE - 1) * (SIZE - 1);
+      const v = y / (SIDE - 1) * (SIZE - 1);
+      const p = sample(positions, u, v);
+      const i = (y * SIDE + x) * 7;
+      expect(mesh.vertices[i]).toBeCloseTo(p[0] * 2 - 1, 6);
+      expect(mesh.vertices[i + 1]).toBeCloseTo(1 - p[1] * 2, 6);
+      for (let k = 0; k < 3; k++) {
+        expect(mesh.vertices[i + 2 + k]).toBeGreaterThanOrEqual(0);
+        expect(mesh.vertices[i + 2 + k]).toBeLessThanOrEqual(1);
+      }
+    }
+  }
+});
+
+test("reusing control storage never accumulates deformation or changes the playback phase", () => {
+  const data = points(0);
+  for (const t of [0, 3.4, 60, 720, 0, 3.4]) {
+    expect(points(t, 0.4, data)).toBe(data);
+    expect(data).toEqual(points(t, 0.4));
+    const next = points(t + 1 / 60, 0.4);
+    for (let i = 0; i < data.length; i++) expect(Math.abs(next[i] - data[i])).toBeLessThan(0.002);
+  }
 });

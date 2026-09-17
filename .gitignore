@@ -29,4 +29,5 @@ tests/*
 !tests/spring.test.ts
 !tests/lyric_transition.test.ts
 !tests/lyrics_motion.test.ts
+!tests/audio_motion.test.ts
 bun.lock

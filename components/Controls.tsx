@@ -499,7 +499,7 @@ const Controls: React.FC<ControlsProps> = ({
 
       {/* Visualizer */}
       <div className="w-full flex justify-center h-10 mb-4 opacity-40 px-1">
-        <Visualizer audioRef={audioRef} isPlaying={isPlaying && !focused} />
+        <Visualizer audioRef={audioRef} isPlaying={isPlaying} visible={!focused} />
       </div>
 
       {/* Progress Bar */}

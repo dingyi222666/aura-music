@@ -1,4 +1,5 @@
 import { subscribeAudioLevel } from "@/services/audioLevelBridge";
+import type { AudioEnvelope } from "@/services/audioEnvelope";
 import { BaseBackgroundRender } from "./BaseBackgroundRender";
 import backgroundWorkerUrl from "./webWorkerBackground.worker.ts?worker&url";
 
@@ -7,7 +8,7 @@ type WorkerCommand =
   | { type: "resize"; width: number; height: number }
   | { type: "colors"; colors: string[] }
   | { type: "play"; isPlaying: boolean }
-  | { type: "audio"; level: number }
+  | ({ type: "audio" } & AudioEnvelope)
   | { type: "pause"; paused: boolean }
   | { type: "snapshot"; id: number }
   | { type: "watchFrame"; id: number }
@@ -52,8 +53,8 @@ export class WebWorkerBackgroundRender extends BaseBackgroundRender {
         colors,
       };
       this.worker.postMessage(command, [offscreen]);
-      this.unlisten = subscribeAudioLevel((level) => {
-        this.worker?.postMessage({ type: "audio", level });
+      this.unlisten = subscribeAudioLevel((value) => {
+        this.worker?.postMessage({ type: "audio", ...value });
       });
     } catch (error) {
       console.error("Failed to initialize web worker renderer", error);
