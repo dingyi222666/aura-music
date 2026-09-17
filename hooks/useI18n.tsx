@@ -36,6 +36,9 @@ interface Dict {
     noMusic: string;
     settings: string;
     playback: string;
+    loopAll: string;
+    loopOne: string;
+    shuffle: string;
     previous: string;
     next: string;
     queue: string;
@@ -159,6 +162,9 @@ export const dicts: Record<Lang, Dict> = {
       noMusic: "No Music Loaded",
       settings: "Settings/More",
       playback: "Playback Mode",
+      loopAll: "Repeat all",
+      loopOne: "Repeat one",
+      shuffle: "Shuffle",
       previous: "Previous",
       next: "Next",
       queue: "Queue",
@@ -281,6 +287,9 @@ export const dicts: Record<Lang, Dict> = {
       noMusic: "未加载音乐",
       settings: "设置/更多",
       playback: "播放模式",
+      loopAll: "列表循环",
+      loopOne: "单曲循环",
+      shuffle: "随机播放",
       previous: "上一首",
       next: "下一首",
       queue: "队列",

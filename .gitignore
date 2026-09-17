@@ -30,4 +30,9 @@ tests/*
 !tests/lyric_transition.test.ts
 !tests/lyrics_motion.test.ts
 !tests/audio_motion.test.ts
+!tests/audio_spectrum.test.ts
+!tests/lyric_visibility.test.ts
 bun.lock
+
+# Local renderer comparison bundles and fixtures
+.background-review/

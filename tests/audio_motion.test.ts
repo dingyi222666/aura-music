@@ -47,7 +47,7 @@ test("beats affect exposure envelopes without changing the fluid path, and pause
   const frozen = { ...motion };
   motion.step(10, false, input);
   expect({ ...motion }).toEqual(frozen);
-  expect(motion.time).toBeCloseTo(4, 6);
+  expect(motion.time).toBeCloseTo(2, 6);
   expect(motion.bass).toBeGreaterThan(silent.bass);
   expect(motion.onset).toBeGreaterThan(silent.onset);
   expect(motion.climax).toBeLessThan(0.3);

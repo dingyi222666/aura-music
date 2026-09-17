@@ -61,6 +61,11 @@ Tests live under `tests/` and use `bun:test` (`import { test, expect } from "bun
 - Rely on TypeScript and the existing code style as the primary source of
   truth for correctness and style.
 
+## Browser Verification
+
+- Prefer Chrome DevTools MCP for browser checks, page JavaScript, screenshots, and renderer comparisons.
+- Reuse the fixed profile at `~/.cache/chrome-devtools-mcp/chrome-profile`; do not use an isolated or temporary profile.
+
 ## Testing Guidelines
 
 - New tests should be placed under `tests/` and use Bun's test API:

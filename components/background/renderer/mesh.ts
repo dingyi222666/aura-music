@@ -1,10 +1,28 @@
-// Bicubic Hermite patches: positions, two tangents and their mixed derivative
-// are shared by adjacent patches. The control field is generated analytically;
-// no hand-authored layouts or external control-point presets are used.
-export const SIZE = 20;
-const STEPS = 8;
+import { fold, strength } from "./composition";
+
+// Four authored 4x4 Hermite layouts. Keep the perimeter fixed, and move the
+// interior anchors through broad ribbon, cove, diagonal and fan compositions.
+// References and timing: docs/mesh-gradient.md. No runtime randomness.
+export const SIZE = 4;
+const STEPS = 64;
 export const SIDE = (SIZE - 1) * STEPS + 1;
 const STRIDE = 8;
+export const DURATION = 8;
+export const layouts = [
+  [[0.22, 0.29], [0.62, 0.20], [0.39, 0.76], [0.78, 0.63]], // Ribbon
+  [[0.36, 0.20], [0.76, 0.39], [0.23, 0.62], [0.61, 0.79]], // Cove
+  [[0.23, 0.38], [0.60, 0.25], [0.39, 0.73], [0.77, 0.59]], // Diagonal
+  [[0.39, 0.28], [0.75, 0.25], [0.23, 0.70], [0.61, 0.76]], // Fan
+] as const;
+
+// Interior tangent direction/length controls the bend and width of each ribbon,
+// rather than deriving every curve from anchor position alone.
+const tangents = [
+  [[-0.35, 0.30, 1.20, 0.55], [0.30, -0.40, 0.70, 1.15], [0.40, -0.30, 0.65, 1.10], [-0.30, 0.35, 1.25, 0.60]],
+  [[0.30, -0.35, 0.70, 1.20], [-0.40, 0.25, 1.15, 0.60], [-0.25, 0.40, 1.20, 0.65], [0.35, -0.30, 0.60, 1.20]],
+  [[-0.30, 0.40, 1.25, 0.65], [0.35, -0.25, 0.65, 1.20], [0.25, -0.35, 0.75, 1.15], [-0.40, 0.30, 1.15, 0.65]],
+  [[0.35, -0.30, 0.65, 1.20], [-0.25, 0.35, 1.20, 0.70], [-0.35, 0.25, 1.15, 0.60], [0.30, -0.40, 0.70, 1.25]],
+] as const;
 
 export const basis = (t: number): number[] => [
   2 * t * t * t - 3 * t * t + 1,
@@ -13,60 +31,49 @@ export const basis = (t: number): number[] => [
   t * t * t - t * t,
 ];
 
-// Two nonuniform shears form an orientation-preserving map. The secondary
-// waves create narrower shoulders within the large color regions. Tangents
-// come from its Jacobian, not averages of the neighboring point positions.
 export const points = (
-  time: number, audio = 0, data: Float32Array = new Float32Array(SIZE * SIZE * STRIDE),
+  time: number, _audio = 0, data: Float32Array = new Float32Array(SIZE * SIZE * STRIDE),
 ): Float32Array => {
-  const phase = time * 0.18;
-  const squeeze = 0.58 + 0.14 * Math.sin(phase * 0.73 + 1.4);
-  const spread = 0.45 + 0.12 * Math.sin(phase * 0.51 - 0.8);
-  const gain = 1 + Math.max(0, Math.min(1, audio)) * 0.04;
-  const step = 1 / (SIZE - 1);
+  const phase = ((time / DURATION) % layouts.length + layouts.length) % layouts.length;
+  const index = Math.floor(phase);
+  const t = phase - index;
+  // Quintic easing makes velocity and acceleration continuous at every preset,
+  // including the last-to-first seam. The cover has its own continuous drift.
+  const blend = t * t * t * (t * (t * 6 - 15) + 10);
   for (let y = 0; y < SIZE; y++) {
-    const sy = y * step;
-    const ay = Math.PI * 2 * sy - 0.9 - phase * 0.27;
-    const v = sy + squeeze / (Math.PI * 2) * (Math.sin(ay) - Math.sin(-0.9 - phase * 0.27));
-    const dy = 1 + squeeze * Math.cos(ay);
-    const wave = gain * (0.19 * Math.sin(v * 5.4 + phase + 0.8) +
-      0.05 * Math.sin(v * 10.8 - phase * 0.63 + 2.1));
-    const slope = gain * (0.19 * 5.4 * Math.cos(v * 5.4 + phase + 0.8) +
-      0.05 * 10.8 * Math.cos(v * 10.8 - phase * 0.63 + 2.1));
     for (let x = 0; x < SIZE; x++) {
-      const sx = x * step;
-      const ax = Math.PI * 2 * sx + 0.7 + phase * 0.31;
-      const u = sx + spread / (Math.PI * 2) * (Math.sin(ax) - Math.sin(0.7 + phase * 0.31));
-      const dx = 1 + spread * Math.cos(ax);
-      const su = Math.sin(Math.PI * u);
-      const cu = Math.PI * Math.cos(Math.PI * u);
-      const px = u + su * wave;
-      const xu = 1 + cu * wave;
-      const xv = su * slope;
-      const xuv = cu * slope;
-      const flow = gain * (0.17 * Math.sin(px * 5.8 - phase * 0.81 + 1.9) +
-        0.045 * Math.sin(px * 11.6 + phase * 0.57 + 0.4));
-      const first = gain * (0.17 * 5.8 * Math.cos(px * 5.8 - phase * 0.81 + 1.9) +
-        0.045 * 11.6 * Math.cos(px * 11.6 + phase * 0.57 + 0.4));
-      const second = -gain * (0.17 * 5.8 ** 2 * Math.sin(px * 5.8 - phase * 0.81 + 1.9) +
-        0.045 * 11.6 ** 2 * Math.sin(px * 11.6 + phase * 0.57 + 0.4));
-      const sv = Math.sin(Math.PI * v);
-      const cv = Math.PI * Math.cos(Math.PI * v);
-      const py = v + sv * flow;
-      const yu = sv * first * xu;
-      const yv = 1 + cv * flow + sv * first * xv;
-      const yuv = cv * first * xu + sv * (second * xv * xu + first * xuv);
-      // Compress parameter bands before bending them, so the narrow color
-      // boundaries follow the flow instead of forming straight screen axes.
       const i = (y * SIZE + x) * STRIDE;
-      data[i] = px;
-      data[i + 1] = py;
-      data[i + 2] = xu * dx * step;
-      data[i + 3] = yu * dx * step;
-      data[i + 4] = xv * dy * step;
-      data[i + 5] = yv * dy * step;
-      data[i + 6] = xuv * dx * dy * step * step;
-      data[i + 7] = yuv * dx * dy * step * step;
+      const inner = x > 0 && x < SIZE - 1 && y > 0 && y < SIZE - 1;
+      for (let c = 0; c < 2; c++) {
+        const a = inner ? layouts[index][(y - 1) * 2 + x - 1][c] : (c ? y : x) / (SIZE - 1);
+        const b = inner ? layouts[(index + 1) % layouts.length][(y - 1) * 2 + x - 1][c] : a;
+        data[i + c] = a + (b - a) * blend;
+      }
+    }
+  }
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const left = Math.max(0, x - 1), right = Math.min(SIZE - 1, x + 1);
+      const top = Math.max(0, y - 1), bottom = Math.min(SIZE - 1, y + 1);
+      const i = (y * SIZE + x) * STRIDE;
+      for (let c = 0; c < 2; c++) {
+        data[i + 2 + c] = (data[(y * SIZE + right) * STRIDE + c] - data[(y * SIZE + left) * STRIDE + c]) / (right - left);
+        data[i + 4 + c] = (data[(bottom * SIZE + x) * STRIDE + c] - data[(top * SIZE + x) * STRIDE + c]) / (bottom - top);
+        data[i + 6 + c] = (data[(bottom * SIZE + right) * STRIDE + c] - data[(bottom * SIZE + left) * STRIDE + c]
+          - data[(top * SIZE + right) * STRIDE + c] + data[(top * SIZE + left) * STRIDE + c]) / ((right - left) * (bottom - top));
+      }
+      if (x > 0 && x < SIZE - 1 && y > 0 && y < SIZE - 1) {
+        const a = tangents[index][(y - 1) * 2 + x - 1];
+        const b = tangents[(index + 1) % tangents.length][(y - 1) * 2 + x - 1];
+        for (let axis = 0; axis < 2; axis++) {
+          const angle = a[axis] + (b[axis] - a[axis]) * blend;
+          const power = a[axis + 2] + (b[axis + 2] - a[axis + 2]) * blend;
+          const offset = i + 2 + axis * 2;
+          const u = data[offset], v = data[offset + 1];
+          data[offset] = (u * Math.cos(angle) - v * Math.sin(angle)) * power;
+          data[offset + 1] = (u * Math.sin(angle) + v * Math.cos(angle)) * power;
+        }
+      }
     }
   }
   return data;
@@ -96,6 +103,7 @@ export const sample = (data: Float32Array, u: number, v: number): number[] => {
 export class Mesh {
   readonly vertices = new Float32Array(SIDE * SIDE * 7);
   readonly indices = new Uint16Array((SIDE - 1) * (SIDE - 1) * 6);
+  private readonly surface = new Float32Array(SIDE * SIDE * 2);
   private readonly weights = new Float32Array(SIDE * 4);
   private readonly cells = new Uint8Array(SIDE);
   private readonly rows = new Float32Array(SIZE * SIDE * 7);
@@ -119,7 +127,7 @@ export class Mesh {
     }
   }
 
-  update(controls: Float32Array, colors: Float32Array) {
+  update(controls: Float32Array, colors: Float32Array, crease?: Float32Array) {
     // Interpolate rows once, then columns. Work per vertex stays constant as
     // the control grid grows; all frame storage is reused.
     for (let y = 0; y < SIZE; y++) {
@@ -162,13 +170,36 @@ export class Mesh {
         }
       }
     }
+    if (!crease || crease[2] === 0) return;
+    for (let i = 0; i < SIDE * SIDE; i++) {
+      this.surface[i * 2] = this.vertices[i * 7];
+      this.surface[i * 2 + 1] = this.vertices[i * 7 + 1];
+    }
+    // Let the curvature constraint lead while a fold is visible. Limit the mesh's
+    // influence to keep random bends rounded as the underlying surface moves.
+    for (let y = 0; y < SIDE; y++) {
+      const amount = Math.min(1, strength(y / (SIDE - 1), crease) / crease[3]);
+      const flat = amount * amount * (3 - 2 * amount) * 0.90;
+      for (let x = 0; x < SIDE; x++) {
+        const u = Math.max(0, Math.min(SIDE - 1, fold(x / (SIDE - 1), y / (SIDE - 1), crease) * (SIDE - 1)));
+        const left = Math.min(SIDE - 2, Math.floor(u));
+        const t = u - left;
+        const a = (y * SIDE + left) * 2;
+        const i = (y * SIDE + x) * 7;
+        for (let c = 0; c < 2; c++) {
+          const curved = this.surface[a + c] * (1 - t) + this.surface[a + 2 + c] * t;
+          const plane = c ? 1 - y / (SIDE - 1) * 2 : u / (SIDE - 1) * 2 - 1;
+          this.vertices[i + c] = curved * (1 - flat) + plane * flat;
+        }
+      }
+    }
   }
 }
 
 export type Color = [number, number, number];
 
 export const palette = (input: Color[]): Float32Array => {
-  const colors = input.length ? input : [[0.10, 0.08, 0.14], [0.05, 0.08, 0.12]] as Color[];
+  const colors = input.length ? input : [[0.30, 0.16, 0.43], [0.67, 0.31, 0.40], [0.13, 0.25, 0.40], [0.24, 0.15, 0.35]] as Color[];
   // Keep the no-artwork fallback broad when the geometric grid is refined.
   const data = new Float32Array(SIZE * SIZE * 3);
   for (let y = 0; y < SIZE; y++) {
@@ -220,18 +251,25 @@ export const blur = (pixels: Uint8ClampedArray | Float32Array, size: number, sig
   return output;
 };
 
-// Process the complete cover before spatial filtering. Keeping out-of-gamut
-// values in float storage until after blur avoids clipped, flat color islands.
+// Process the actual cover in place: compress luminance and expand chroma.
+// A shared gamut limit preserves hue instead of independently clipping channels.
 export const prepare = (pixels: Uint8ClampedArray, size: number): Uint8ClampedArray => {
   const data = new Float32Array(pixels.length);
   for (let i = 0; i < pixels.length; i += 4) {
     const alpha = pixels[i + 3] / 255;
-    const luma = pixels[i] * 0.2126 + pixels[i + 1] * 0.7152 + pixels[i + 2] * 0.0722;
+    const luma = (pixels[i] * 0.30 + pixels[i + 1] * 0.59 + pixels[i + 2] * 0.11) / 255;
+    const tone = luma * 0.72 + 0.14;
+    let gain = 1.9;
     for (let c = 0; c < 3; c++) {
-      const value = luma + (pixels[i + c] - luma) * 2.8;
-      data[i + c] = ((value - 127.5) * 0.72 + 127.5) * 0.76 * alpha;
+      const delta = pixels[i + c] / 255 - luma;
+      if (delta > 0) gain = Math.min(gain, (1 - tone) / delta);
+      if (delta < 0) gain = Math.min(gain, -tone / delta);
     }
+    for (let c = 0; c < 3; c++) data[i + c] = (tone + (pixels[i + c] / 255 - luma) * gain) * 255 * alpha;
     data[i + 3] = 255;
   }
-  return blur(data, size, size * 0.075);
+  // Remove faces and lettering before deformation. A broad source blur keeps
+  // the cover's color regions without stretching recognizable subjects; the
+  // much lighter final blur preserves boundaries created by the mesh itself.
+  return blur(data, size, Math.max(0.5, size * 0.15));
 };

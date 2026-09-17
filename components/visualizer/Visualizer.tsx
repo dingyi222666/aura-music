@@ -13,8 +13,7 @@ interface VisualizerProps {
 const sourceMap = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>();
 const contextMap = new WeakMap<HTMLAudioElement, AudioContext>();
 
-const BAR_COUNT = 96;
-const FFT_SIZE = 1024;
+const BAR_COUNT = 56;
 const BAR_GAP = 4;
 
 const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying, visible = true }) => {
@@ -157,8 +156,6 @@ const Visualizer: React.FC<VisualizerProps> = ({ audioRef, isPlaying, visible = 
                     config: {
                         barCount: BAR_COUNT,
                         gap: BAR_GAP,
-                        fftSize: FFT_SIZE,
-                        smoothingTimeConstant: 0.5,
                         dpr: dpr
                     },
                     port: channel.port1

@@ -32,6 +32,7 @@ class AudioProcessor extends AudioWorkletProcessor {
       if (event.data.type !== "PORT") return;
       this.port2?.close();
       this.port2 = event.data.port;
+      this.port2?.postMessage({ type: "SAMPLE_RATE", rate: sampleRate });
       this.port.postMessage({ type: "PORT_RECEIVED" });
     };
   }

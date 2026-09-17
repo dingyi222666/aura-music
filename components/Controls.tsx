@@ -40,6 +40,7 @@ interface ControlsProps {
   playMode: PlayMode;
   onToggleMode: () => void;
   onTogglePlaylist: () => void;
+  showPlaylist: boolean;
   accentColor: string;
   volume: number;
   onVolumeChange: (volume: number) => void;
@@ -72,6 +73,7 @@ const Controls: React.FC<ControlsProps> = ({
   playMode,
   onToggleMode,
   onTogglePlaylist,
+  showPlaylist,
   accentColor,
   volume,
   onVolumeChange,
@@ -341,27 +343,12 @@ const Controls: React.FC<ControlsProps> = ({
     return () => window.removeEventListener("wheel", handleWheel);
   }, [showVolumePopup, showSettingsPopup, volume, speed, onVolumeChange, onSpeedChange]);
 
-  const getModeIcon = () => {
-    // Standard white colors, simplified hover
-    const iconClass =
-      "w-5 h-5 text-white/60 hover:text-white transition-colors";
-
-    switch (playMode) {
-      case PlayMode.LOOP_ONE:
-        return (
-          <div className="relative">
-            <LoopOneIcon className={iconClass} />
-            <span className="absolute -top-1 -right-1 text-[8px] font-bold bg-white text-black rounded-[2px] px-0.5 leading-none">
-              1
-            </span>
-          </div>
-        );
-      case PlayMode.SHUFFLE:
-        return <ShuffleIcon className={iconClass} />;
-      default: // LOOP_ALL
-        return <LoopIcon className={iconClass} />;
-    }
-  };
+  const mode = playMode === PlayMode.LOOP_ONE
+    ? dict.controls.loopOne
+    : playMode === PlayMode.SHUFFLE ? dict.controls.shuffle : dict.controls.loopAll;
+  const Mode = playMode === PlayMode.LOOP_ONE
+    ? LoopOneIcon
+    : playMode === PlayMode.SHUFFLE ? ShuffleIcon : LoopIcon;
 
   const getVolumeButtonIcon = () => {
     if (volume === 0) {
@@ -498,25 +485,25 @@ const Controls: React.FC<ControlsProps> = ({
       </div>
 
       {/* Visualizer */}
-      <div className="w-full flex justify-center h-10 mb-4 opacity-40 px-1">
+      <div className="w-full flex justify-center h-10 mb-4 opacity-60 px-1">
         <Visualizer audioRef={audioRef} isPlaying={isPlaying} visible={!focused} />
       </div>
 
       {/* Progress Bar */}
       <div className="w-full flex flex-col group/bar relative mb-8 px-1">
-        <div className="relative w-full h-3 flex items-center cursor-pointer group">
+        <div className="slider relative w-full h-3 flex items-center cursor-pointer">
           {/* Background Track */}
-          <div className="absolute inset-x-0 h-1.5 bg-white/20 rounded-full group-hover:h-3 transition-[height] duration-200"></div>
+          <div className="absolute inset-x-0 slider-track h-1.5 bg-white/20 rounded-full"></div>
 
           {/* Buffer Progress */}
           <div
-            className="absolute left-0 h-1.5 rounded-full group-hover:h-3 transition-[height] duration-200 bg-white/30"
+            className="absolute left-0 slider-track h-1.5 rounded-full bg-white/30"
             style={{ width: bufferedWidthPercent + "%" }}
           ></div>
 
           {/* Active Progress */}
           <div
-            className="absolute left-0 h-1.5 rounded-full group-hover:h-3 transition-[height] duration-200 bg-white"
+            className="absolute left-0 slider-track h-1.5 rounded-full bg-white"
             style={{ width: `${(displayTime / (duration || 1)) * 100}%` }}
           ></div>
 
@@ -526,6 +513,7 @@ const Controls: React.FC<ControlsProps> = ({
             min={0}
             max={duration || 0}
             value={displayTime}
+            aria-label={dict.keys.seek}
             onPointerDown={startSeek}
             onInput={(e) => {
               const time = parseFloat(e.currentTarget.value);
@@ -557,10 +545,12 @@ const Controls: React.FC<ControlsProps> = ({
       <div className="w-full flex items-center justify-between mb-8 px-0">
         <button
           onClick={onToggleMode}
-          className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-hidden"
-          title={dict.controls.playback}
+          className="player-action"
+          data-active={playMode !== PlayMode.LOOP_ALL}
+          aria-label={`${dict.controls.playback}: ${mode}`}
+          title={`${dict.controls.playback}: ${mode}`}
         >
-          {getModeIcon()}
+          <Mode className="w-[23px] h-[23px]" />
         </button>
 
         <button
@@ -599,10 +589,13 @@ const Controls: React.FC<ControlsProps> = ({
         <div className="relative flex items-center justify-center">
           <button
             onClick={onTogglePlaylist}
-            className="text-white/70 hover:bg-white/10 hover:text-white rounded-full p-2.5 transition-colors active:bg-white/20 outline-hidden"
+            className="player-action"
+            data-active={showPlaylist}
+            aria-label={dict.controls.queue}
+            aria-expanded={showPlaylist}
             title={dict.controls.queue}
           >
-            <QueueIcon className="w-6 h-6 fill-current" />
+            <QueueIcon className="w-[23px] h-[23px]" />
           </button>
           {playlistPanel}
         </div>
@@ -611,10 +604,10 @@ const Controls: React.FC<ControlsProps> = ({
       {/* Inline Volume Slider */}
       <div className="w-full flex items-center gap-3 group/vol mb-2 px-1 mt-2">
         <VolumeMuteIcon className="w-4 h-4 text-white/60 fill-current" />
-        <div className="relative flex-1 h-2 flex items-center cursor-pointer">
-          <div className="absolute inset-x-0 h-1 bg-white/20 rounded-full group-hover/vol:h-2 transition-[height] duration-200"></div>
+        <div className="slider slider-volume relative flex-1 h-5 flex items-center cursor-pointer">
+          <div className="absolute inset-x-0 slider-track h-1 bg-white/20 rounded-full"></div>
           <div
-            className="absolute left-0 h-1 bg-white rounded-full group-hover/vol:h-2 transition-[height] duration-200 pointer-events-none"
+            className="absolute left-0 slider-track h-1 bg-white rounded-full pointer-events-none"
             style={{ width: `${volume * 100}%` }}
           ></div>
           <input
@@ -623,6 +616,7 @@ const Controls: React.FC<ControlsProps> = ({
             max={1}
             step={0.01}
             value={volume}
+            aria-label={dict.keys.volume}
             onInput={(e) => onVolumeChange(parseFloat((e.target as HTMLInputElement).value))}
             onChange={(e) => onVolumeChange(parseFloat(e.currentTarget.value))}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 touch-none"

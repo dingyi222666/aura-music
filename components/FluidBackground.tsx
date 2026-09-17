@@ -148,6 +148,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
       layersRef.current = [];
       return;
     }
+    if (canvasRef.current && WebWorkerBackgroundRender.isSupported(canvasRef.current)) return;
     let cancelled = false;
     const generate = async () => {
       const newLayers = await createFlowingLayers(
@@ -304,7 +305,7 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
     }
 
     const shouldUseWorker =
-      !isMobileLayout && WebWorkerBackgroundRender.isSupported(canvas);
+      WebWorkerBackgroundRender.isSupported(canvas);
 
     if (
       shouldUseWorker &&

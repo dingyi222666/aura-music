@@ -1,5 +1,7 @@
 import { Mesh, prepare, palette, points, type Color } from "./mesh";
+import { compose, crease } from "./composition";
 import { Motion } from "./motion";
+import { Blur } from "./postprocess";
 import type { AudioEnvelope } from "@/services/audioEnvelope";
 
 // Web worker scope is typed explicitly because the app also includes DOM types.
@@ -25,100 +27,83 @@ type Command =
 
 const VERTEX = `
 attribute vec2 position;
-attribute vec3 color;
 attribute vec2 uv;
+attribute vec3 color;
 varying vec2 texcoord;
 varying vec3 pigment;
 uniform vec2 aspect;
-uniform vec2 orientation;
 void main() {
-  pigment = color;
   texcoord = uv;
-  // Rotate the surface independently of the artwork. A constant diagonal
-  // margin covers the viewport throughout a turn without rhythmic zooming.
-  mat2 turn = mat2(orientation.y, -orientation.x, orientation.x, orientation.y);
-  gl_Position = vec4(turn * position * 1.415 * aspect, 0.0, 1.0);
+  pigment = color;
+  // Fixed surface framing leaves the motion to local control points.
+  // A consistent front sheet prevents intersecting rows from painting over
+  // each other according to triangle submission order.
+  gl_Position = vec4(position * 1.05 * aspect, 0.8 - uv.x * 1.6, 1.0);
 }`;
 
 const FRAGMENT = `
 precision highp float;
+varying vec2 texcoord;
 varying vec3 pigment;
 uniform float audio;
-uniform vec2 highlight;
-uniform vec2 rotation;
-uniform vec3 tension;
+uniform float time;
+uniform vec4 twists[2];
 uniform sampler2D artwork;
 uniform sampler2D previous;
 uniform float blend;
 uniform float coverage;
-varying vec2 texcoord;
-vec2 extend(vec2 p) {
-  p = 1.0 - abs(mod(p, 2.0) - 1.0);
-  vec2 low = clamp(p / 0.10, 0.0, 1.0);
-  vec2 high = clamp((1.0 - p) / 0.10, 0.0, 1.0);
-  p = mix(p, 0.10 * low * low * (2.0 - low), step(p, vec2(0.10)));
-  return mix(p, 1.0 - 0.10 * high * high * (2.0 - high), step(vec2(0.90), p));
+mat2 turn(float angle) {
+  float s = sin(angle), c = cos(angle);
+  return mat2(c, -s, s, c);
 }
-vec3 cover(vec2 p) {
-  return mix(texture2D(previous, p).rgb, texture2D(artwork, p).rgb, blend);
+vec2 twist(vec2 uv, vec4 control) {
+  vec2 delta = uv - control.xy;
+  float falloff = max(0.0, 1.0 - length(delta) / control.z);
+  return control.xy + turn(control.w * falloff * falloff) * delta;
+}
+vec3 cover(vec2 uv) {
+  uv = 1.0 - abs(mod(uv, 2.0) - 1.0);
+  return mix(texture2D(previous, uv).rgb, texture2D(artwork, uv).rgb, blend);
 }
 void main() {
-  // A tiny static dither prevents visible bands in the darkest smooth regions.
-  float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
-  vec2 q = texcoord - 0.5;
-  float s = rotation.x, c = rotation.y;
-  // Two offset views of the complete cover travel at different orientations.
-  // Mirrored continuation avoids the solid strips produced by edge clamping.
-  vec3 image = cover(extend(mat2(c, -s, s, c) * q * 2.0 + vec2(0.67, 0.62)));
-  vec3 echo = cover(extend(mat2(s, -c, c, s) * q * 1.65 + vec2(0.29, 0.61)));
-  // Broad neutral artwork regions should not wash out the entire surface.
-  // Reveal another view through moving, curved regions of the same mesh.
-  // All hues still come from the artwork, without a substituted palette.
-  float chroma = max(image.r, max(image.g, image.b)) - min(image.r, min(image.g, image.b));
-  // Briefly tighten one moving section of the contour, then let it relax.
-  // A finite transition retains smooth edges without an outlined color block.
-  vec2 offset = texcoord - tension.yz;
-  float width = mix(0.35, 0.025, tension.x *
-    (1.0 - smoothstep(0.025, 0.23, dot(offset, offset))));
-  // One open curve, with a single crossing along its local normal. Unlike
-  // multiplied waves, it cannot create crossing seams or enclosed islands.
-  vec2 seam = mat2(c, -s, s, c) * q;
-  float line = seam.y - (0.52 + s * 0.16) * seam.x * seam.x - 0.2 * seam.x - 0.03;
-  float crossing = smoothstep(-width, width, line);
-  float relief = 0.72 * (1.0 - smoothstep(0.08, 0.24, chroma));
-  // Compose smooth weights instead of max(), which introduced extra creases
-  // wherever the neutral-artwork correction met the main contour.
-  image = mix(image, echo, relief + (1.0 - relief) * crossing);
-  // Keep shading independent of hue and source luminance, preserving the
-  // artwork's relative color areas. Elliptic falloff remains gentle at edges.
-  float shade = 1.0 - 0.24 * smoothstep(0.08, 0.60, dot(q, q));
-  // Light only a local color region in mesh coordinates. Its footprint bends
-  // with the surface and ends along the existing crossing, not a screen-wide
-  // exposure pulse or a separate circular spotlight.
-  vec2 focus = mat2(c, -s, s, c) * (highlight - 0.5);
-  // A single finite arc segment is the beat target. Its along-curve falloff
-  // prevents a second spot or a screen-wide brightness pulse.
-  float edge = exp(-pow(line / mix(0.12, 0.075, tension.x), 2.0));
-  float along = exp(-pow((seam.x - focus.x) / 0.42, 2.0));
-  float light = edge * along;
-  vec3 color = mix(pigment, image, coverage) * shade * (1.0 + audio * light * 0.38);
-  gl_FragColor = vec4(clamp(color + grain / 255.0, 0.0, 1.0), 1.0);
+  vec2 uv = texcoord;
+  vec2 drift = vec2(sin(time * 0.13), cos(time * 0.11)) * vec2(0.10, 0.08);
+  // One continuous artwork field supplies the large-scale composition. Broad
+  // advection and bounded twists bend it without rotating the entire picture.
+  vec2 flow = uv + vec2(
+    sin(uv.y * 3.1 + time * 0.065),
+    cos(uv.x * 2.8 - time * 0.055)
+  ) * 0.14;
+  flow = twist(flow, vec4(twists[0].xyz, twists[0].w * 0.55));
+  flow = twist(flow, vec4(twists[1].xyz, twists[1].w * 0.4));
+  // Reorient the full cover as it flows, changing which color regions meet.
+  // The varying angular speed and local twists keep this from a rigid spin.
+  float angle = time * 0.10 + sin(time * 0.16) * 0.42;
+  vec2 center = vec2(0.5) + vec2(sin(time * 0.09), cos(time * 0.12)) * 0.06;
+  vec3 image = cover(turn(angle) * (flow - center) * 1.15 + center + drift);
+  float light = exp(-dot(uv - twists[0].xy, uv - twists[0].xy) * 8.0);
+  // Final screen-space blur, exposure and dithering are applied after the
+  // mesh is rasterized. Source color enhancement happens once at image upload.
+  gl_FragColor = vec4(mix(pigment, image, coverage) * (1.0 + audio * light * 0.08), 1.0);
 }`;
 
 const mesh = new Mesh();
 const positions = points(0);
+const twists = new Float32Array(8);
+const seed = Math.floor(Math.random() * 0x7fffffff);
+const creases = crease(0);
 const motion = new Motion();
 const signal: AudioEnvelope = { level: 0, bass: 0, onset: 0 };
 let gl: WebGLRenderingContext | null = null;
 let program: WebGLProgram | null = null;
+let blur: Blur | null = null;
+const attributes: number[] = [];
 let vertices: WebGLBuffer | null = null;
 let indices: WebGLBuffer | null = null;
 let uniform: WebGLUniformLocation | null = null;
-let highlight: WebGLUniformLocation | null = null;
-let rotation: WebGLUniformLocation | null = null;
-let tension: WebGLUniformLocation | null = null;
+let controls: WebGLUniformLocation | null = null;
+let clock: WebGLUniformLocation | null = null;
 let aspect: WebGLUniformLocation | null = null;
-let orientation: WebGLUniformLocation | null = null;
 let mix: WebGLUniformLocation | null = null;
 let opacity: WebGLUniformLocation | null = null;
 let texture: WebGLTexture | null = null;
@@ -189,7 +174,8 @@ const resize = (width: number, height: number) => {
   gl.canvas.width = Math.max(1, Math.round(width));
   gl.canvas.height = Math.max(1, Math.round(height));
   dirty = true;
-  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  blur?.resize(gl.canvas.width, gl.canvas.height);
+  gl.useProgram(program);
   const ratio = gl.canvas.width / gl.canvas.height;
   gl.uniform2f(aspect, Math.max(1, 1 / ratio), Math.max(1, ratio));
 };
@@ -209,30 +195,37 @@ const render = (now: number) => {
   }
   const blend = transition * transition * (3 - 2 * transition);
   for (let i = 0; i < colors.length; i++) colors[i] = origin[i] + (target[i] - origin[i]) * blend;
-  // Shape evolution is subordinate to the turn, avoiding horizontal/vertical
-  // sweeps that overpower the visible orbit of each color region.
-  mesh.update(points(elapsed * 0.45, 0, positions), colors);
+  // Shape and texture controls share a playback clock, preserving their phase
+  // across pauses, visibility changes and cover transitions.
+  crease(elapsed, creases, seed);
+  // Keep the local fold's height bounded in screen space on wide displays too.
+  const ratio = Math.max(1, gl.canvas.width / gl.canvas.height);
+  creases[4] = 0.5 + (creases[4] - 0.5) / ratio;
+  creases[5] /= ratio;
+  mesh.update(points(elapsed, 0, positions), colors, creases);
+  compose(elapsed, twists);
   gl.useProgram(program);
+  blur?.begin();
   gl.bindBuffer(gl.ARRAY_BUFFER, vertices);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
+  for (let i = 0; i < attributes.length; i++) {
+    gl.enableVertexAttribArray(attributes[i]);
+    gl.vertexAttribPointer(attributes[i], i === 1 ? 3 : 2, gl.FLOAT, false, 28, [0, 8, 20][i]);
+  }
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, mesh.vertices);
   gl.uniform1f(uniform, motion.climax);
-  gl.uniform2f(highlight, 0.5 + 0.1 * Math.sin(elapsed * 0.08 + 0.6), 0.5 + 0.1 * Math.cos(elapsed * 0.061 + 1.4));
-  gl.uniform2f(orientation, Math.sin(motion.angle), Math.cos(motion.angle));
-  const swing = 0.22 * Math.sin(elapsed * 0.105) + 0.08 * Math.cos(elapsed * 0.067) - 0.08;
-  gl.uniform2f(rotation, Math.sin(swing), Math.cos(swing));
-  gl.uniform3f(tension,
-    Math.pow(Math.max(0, Math.sin(elapsed * 0.29 - 0.7)), 4),
-    0.5 + 0.2 * Math.sin(elapsed * 0.13 + 0.9),
-    0.5 + 0.2 * Math.cos(elapsed * 0.17 - 0.4),
-  );
+  gl.uniform4fv(controls, twists);
+  gl.uniform1f(clock, elapsed);
   gl.uniform1f(mix, fade * fade * (3 - 2 * fade));
   gl.uniform1f(opacity, coverage);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, previous);
-  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.drawElements(gl.TRIANGLES, mesh.indices.length, gl.UNSIGNED_SHORT, 0);
+  for (const attribute of attributes) gl.disableVertexAttribArray(attribute);
+  blur?.draw();
   dirty = false;
   for (const id of watches) scope.postMessage({ type: "frame", id });
   watches = [];
@@ -268,6 +261,7 @@ scope.onmessage = ({ data }) => {
     gl?.deleteBuffer(vertices);
     gl?.deleteBuffer(indices);
     gl?.deleteProgram(program);
+    blur?.dispose();
     gl?.deleteTexture(texture);
     gl?.deleteTexture(previous);
     gl?.getExtension("WEBGL_lose_context")?.loseContext();
@@ -290,31 +284,22 @@ scope.onmessage = ({ data }) => {
     vertices = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertices);
     gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices.byteLength, gl.DYNAMIC_DRAW);
-    const position = gl.getAttribLocation(program, "position");
-    const color = gl.getAttribLocation(program, "color");
-    gl.enableVertexAttribArray(position);
-    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 28, 0);
-    gl.enableVertexAttribArray(color);
-    gl.vertexAttribPointer(color, 3, gl.FLOAT, false, 28, 8);
-    const uv = gl.getAttribLocation(program, "uv");
-    gl.enableVertexAttribArray(uv);
-    gl.vertexAttribPointer(uv, 2, gl.FLOAT, false, 28, 20);
+    attributes.push(...["position", "color", "uv"].map((name) => gl!.getAttribLocation(program!, name)));
     texture = upload(new Uint8ClampedArray([0, 0, 0, 255]), 1);
     previous = upload(new Uint8ClampedArray([0, 0, 0, 255]), 1);
     gl.uniform1i(gl.getUniformLocation(program, "artwork"), 0);
     gl.uniform1i(gl.getUniformLocation(program, "previous"), 1);
     uniform = gl.getUniformLocation(program, "audio");
-    highlight = gl.getUniformLocation(program, "highlight");
-    rotation = gl.getUniformLocation(program, "rotation");
-    tension = gl.getUniformLocation(program, "tension");
+    controls = gl.getUniformLocation(program, "twists[0]");
+    clock = gl.getUniformLocation(program, "time");
     aspect = gl.getUniformLocation(program, "aspect");
-    orientation = gl.getUniformLocation(program, "orientation");
     mix = gl.getUniformLocation(program, "blend");
     opacity = gl.getUniformLocation(program, "coverage");
     indices = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
     gl.clearColor(0.008, 0.008, 0.01, 1);
+    blur = new Blur(gl);
     resize(data.width, data.height);
     signature = data.colors.join("|");
     change(palette(parse(data.colors)), true);
@@ -348,7 +333,8 @@ scope.onmessage = ({ data }) => {
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (ctx) {
         ctx.drawImage(data.imageData, 0, 0, 64, 64);
-        const next = prepare(ctx.getImageData(0, 0, 64, 64).data, 64);
+        const raw = ctx.getImageData(0, 0, 64, 64).data;
+        const next = prepare(raw, 64);
         // Interrupted song transitions begin at the image currently on screen,
         // rather than jumping to the preceding track's fully resolved cover.
         if (pixels && before && fade < 1) {

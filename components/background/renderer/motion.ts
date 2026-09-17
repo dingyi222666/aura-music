@@ -19,7 +19,7 @@ export class Motion {
   step(dt: number, playing: boolean, input: AudioEnvelope) {
     // Pausing preserves the complete shape and phase, including its tension.
     if (!playing) return;
-    this.time += dt * 0.8;
+    this.time += dt * 0.4;
     this.level = smooth(this.level, input.level, dt, 0.12, 0.55);
     this.bass = smooth(this.bass, input.bass, dt, 0.09, 0.45);
     this.onset = smooth(this.onset, input.onset, dt, 0.025, 0.24);

@@ -3,3 +3,44 @@
 @source "./App.tsx";
 @source "./components";
 @source "./hooks";
+
+/* Animate actual height so both end caps remain circular at every frame. */
+.slider { --track-size: 6px; }
+.slider-volume { --track-size: 4px; }
+.slider-track {
+  pointer-events: none;
+  height: var(--track-size);
+  border-radius: 999px;
+  transition: height 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slider:is(:hover, :focus-within, :active) .slider-track {
+  height: calc(var(--track-size) * 2);
+}
+.player-action {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: rgb(255 255 255 / 0.66);
+  transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 220ms ease, color 220ms ease, box-shadow 220ms ease;
+}
+.player-action:hover {
+  color: white;
+  background: rgb(255 255 255 / 0.09);
+  transform: scale(1.07);
+}
+.player-action:active { transform: scale(0.94); }
+.player-action[data-active="true"] {
+  color: white;
+}
+.player-action:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.8);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .slider-track, .player-action { transition: none; }
+}

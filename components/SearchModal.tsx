@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { SearchIcon, PlayIcon, PlusIcon } from "./Icons";
 import SmartImage from "./SmartImage";
@@ -91,6 +91,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  const located = useRef(false);
 
   // Use search modal hook
   const search = useSearchModal({
@@ -99,6 +100,25 @@ const SearchModal: React.FC<SearchModalProps> = ({
     isPlaying,
     isOpen,
   });
+
+  useLayoutEffect(() => {
+    if (!isOpen || search.activeTab !== "queue" || search.query.trim()) {
+      located.current = false;
+      return;
+    }
+    if (!isRendering || located.current || !listRef.current) return;
+    const index = search.queueResults.findIndex((item) => item.s.id === currentSong?.id);
+    const row = search.itemRefs.current[index];
+    if (!row) return;
+    // Position after the portal mounts, once per opening. Manual scrolling and
+    // keyboard navigation stay in the user's control while the panel is open.
+    listRef.current.scrollTo({
+      top: row.offsetTop + 12 - (listRef.current.clientHeight - row.offsetHeight) / 2,
+      behavior: "instant",
+    });
+    search.setSelectedIndex(index);
+    located.current = true;
+  }, [isOpen, isRendering, search.activeTab, search.query, search.queueResults, currentSong?.id]);
 
   // --- Animation Handling ---
   useEffect(() => {
@@ -378,6 +398,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
                     return (
                       <div
                         key={`${s.id}-${i}`}
+                        aria-current={nowPlaying ? "true" : undefined}
                         ref={(el) => {
                           search.itemRefs.current[idx] = el;
                         }}

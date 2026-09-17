@@ -132,18 +132,6 @@ const applyMeshDistortion = (
   return canvas;
 };
 
-const adjustSaturation = (source: HTMLCanvasElement, saturation: number) => {
-  const canvas = document.createElement("canvas");
-  canvas.width = source.width;
-  canvas.height = source.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return source;
-
-  ctx.filter = `saturate(${saturation})`;
-  ctx.drawImage(source, 0, 0);
-  return canvas;
-};
-
 const getBrightness = (canvas: HTMLCanvasElement) => {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return 0.5;
@@ -184,7 +172,6 @@ const processBitmap = (source: HTMLCanvasElement) => {
   canvas = scaleCanvas(canvas, largeWidth, largeHeight);
   canvas = applyMeshDistortion(canvas, MESH_FLOATS);
   canvas = blurCanvas(canvas, 12);
-  canvas = adjustSaturation(canvas, 1.8);
   canvas = applyBrightnessMask(canvas);
   return canvas;
 };
@@ -223,21 +210,6 @@ const createBaseTexture = async (
     }
   }
 
-  for (let i = 0; i < 8; i++) {
-    const cx = Math.random() * size;
-    const cy = Math.random() * size;
-    const radius = size * (0.3 + Math.random() * 0.4);
-    const color = colors[Math.floor(Math.random() * colors.length)];
-
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-    grad.addColorStop(0, color);
-    grad.addColorStop(1, "rgba(0,0,0,0)");
-
-    ctx.globalAlpha = 0.3 + Math.random() * 0.3;
-    ctx.fillStyle = grad;
-    ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
-  }
-
   return canvas;
 };
 
@@ -262,10 +234,10 @@ export const createFlowingLayers = async (
 
     layers.push({
       image: processed,
-      startX: (Math.random() - 0.5) * 0.2,
-      startY: (Math.random() - 0.5) * 0.2,
-      startScale: 1.15 + Math.random() * 0.1,
-      duration: 20000 + Math.random() * 15000,
+      startX: Math.sin(i * 1.7) * 0.06,
+      startY: Math.cos(i * 1.7) * 0.06,
+      startScale: 1.18 + i * 0.02,
+      duration: 32000 + i * 4000,
       startTime: -i * 5000,
     });
   }

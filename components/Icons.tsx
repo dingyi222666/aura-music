@@ -56,17 +56,23 @@ export const AuraLogo: React.FC<IconProps> = ({ className }) => (
   </svg>
 );
 
+// Playback actions share a 24px grid, rounded joins and a lighter 1.8px stroke.
 export const LoopIcon: React.FC<IconProps> = ({ className }) => (
-  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="M3.5 11V9A3 3 0 0 1 6.5 6h13M16.5 3l3 3-3 3M20.5 13v2a3 3 0 0 1-3 3h-13M7.5 15l-3 3 3 3" />
+  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 10V9a3 3 0 0 1 3-3h13m-3-3 3 3-3 3M20 14v1a3 3 0 0 1-3 3H4m3 3-3-3 3-3" />
   </svg>
 );
 
-export const LoopOneIcon = LoopIcon;
+export const LoopOneIcon: React.FC<IconProps> = ({ className }) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 10V9a3 3 0 0 1 3-3h13m-3-3 3 3-3 3M20 14v1a3 3 0 0 1-3 3H4m3 3-3-3 3-3" />
+    <path d="m10.5 11 1.5-1v4.5" strokeWidth="1.6" />
+  </svg>
+);
 
 export const ShuffleIcon: React.FC<IconProps> = ({ className }) => (
-  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="M3 6h2c4.5 0 7 12 11.5 12H21M18 15l3 3-3 3M3 18h2c1.8 0 3.2-1.8 4.6-4M12.5 9C13.8 7.2 15.1 6 16.5 6H21M18 3l3 3-3 3" />
+  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 6h1.5c4 0 9 12 13 12H21m-3-3 3 3-3 3M4 18h1.5c1.6 0 3.4-2 5.2-4.4M13.3 10.4C15.1 8 16.9 6 18.5 6H21m-3-3 3 3-3 3" />
   </svg>
 );
 
@@ -157,22 +163,9 @@ export const LikeIcon: React.FC<IconProps & { filled?: boolean }> = ({
 );
 
 export const QueueIcon: React.FC<IconProps> = ({ className }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <line x1="9" y1="6" x2="20" y2="6" />
-    <line x1="9" y1="12" x2="20" y2="12" />
-    <line x1="9" y1="18" x2="20" y2="18" />
-    <circle cx="4.5" cy="6" r="1.25" fill="currentColor" stroke="none" />
-    <circle cx="4.5" cy="12" r="1.25" fill="currentColor" stroke="none" />
-    <circle cx="4.5" cy="18" r="1.25" fill="currentColor" stroke="none" />
+  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 5.5h16M4 11.5h16M4 17.5h7" />
+    <path d="m16 15 4.5 3-4.5 3z" fill="currentColor" strokeWidth="1.3" />
   </svg>
 );
 

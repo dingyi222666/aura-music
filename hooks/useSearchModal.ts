@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import { Song } from "../types";
 import { NeteaseTrackInfo } from "../services/lyricsService";
 import { useQueueSearchProvider } from "./useQueueSearchProvider";
@@ -46,30 +46,18 @@ export const useSearchModal = ({
   const queueProvider = useQueueSearchProvider({ queue });
   const neteaseProvider = useNeteaseSearchProvider();
 
-  // Queue search results (real-time)
-  const [queueResults, setQueueResults] = useState<{ s: Song; i: number }[]>(
-    [],
-  );
+  // Derive synchronously so opening/clearing search never locates a stale row.
+  const queueResults = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return queue.map((s, i) => ({ s, i })).filter(({ s }) =>
+      !term || s.title.toLowerCase().includes(term) || s.artist.toLowerCase().includes(term));
+  }, [query, queue]);
 
-  // Offset for Netease pagination
   const [neteaseOffset, setNeteaseOffset] = useState(0);
   const LIMIT = 30;
 
-  // Update queue results in real-time
-  useEffect(() => {
-    if (activeTab === "queue") {
-      queueProvider.search(query).then((results) => {
-        const mappedResults = (results as Song[]).map((s) => {
-          const originalIndex = queue.findIndex((qs) => qs.id === s.id);
-          return { s, i: originalIndex };
-        });
-        setQueueResults(mappedResults);
-      });
-    }
-  }, [query, activeTab, queue]);
-
-  // Reset selected index when switching tabs or query changes
-  useEffect(() => {
+  // Reset before the modal positions its initial selection.
+  useLayoutEffect(() => {
     setSelectedIndex(-1);
   }, [activeTab, query]);
 
@@ -214,6 +202,7 @@ export const useSearchModal = ({
     activeTab,
     setActiveTab,
     selectedIndex,
+    setSelectedIndex,
     contextMenu,
 
     // Providers

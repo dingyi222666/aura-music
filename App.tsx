@@ -13,6 +13,7 @@ import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import { usePlaylist } from "./hooks/usePlaylist";
 import { usePlayer } from "./hooks/usePlayer";
 import { useI18n } from "./hooks/useI18n";
+import { useLyricVisibility } from "./hooks/useLyricVisibility";
 import { keyboardRegistry } from "./services/keyboardRegistry";
 import MediaSessionController from "./components/MediaSessionController";
 import { getThemeColor } from "./services/utils";
@@ -67,17 +68,19 @@ const App: React.FC = () => {
   } = player;
 
   const [focused, setFocused] = useState(() => preference("aura.cover.focused", false));
-  const [visible, setVisible] = useState(() => preference("aura.lyrics.visible"));
+  const [preferred, setPreferred] = useState(() => preference("aura.lyrics.visible"));
+  const lyrics = useLyricVisibility(currentSong, preferred);
+  const visible = lyrics.visible;
   const [translated, setTranslated] = useState(() => preference("aura.lyrics.translated"));
   useEffect(() => {
     try {
       localStorage.setItem("aura.cover.focused", String(focused));
-      localStorage.setItem("aura.lyrics.visible", String(visible));
+      localStorage.setItem("aura.lyrics.visible", String(preferred));
       localStorage.setItem("aura.lyrics.translated", String(translated));
     } catch (err) {
       console.warn("Failed to save lyric preferences", err);
     }
-  }, [visible, translated, focused]);
+  }, [preferred, translated, focused]);
 
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -92,6 +95,13 @@ const App: React.FC = () => {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [dragOffsetX, setDragOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  useEffect(() => {
+    if (visible) return;
+    setActivePanel("controls");
+    setTouchStartX(null);
+    setDragOffsetX(0);
+    setIsDragging(false);
+  }, [visible]);
   const theme = currentSong?.themeColor || getThemeColor(currentSong?.colors);
   const openPlaylist = useCallback(() => {
     setShowPlaylist(true);
@@ -292,6 +302,7 @@ const App: React.FC = () => {
           playMode={playMode}
           onToggleMode={toggleMode}
           onTogglePlaylist={openPlaylist}
+          showPlaylist={showPlaylist}
           accentColor={accentColor}
           volume={volume}
           onVolumeChange={setVolume}
@@ -482,7 +493,8 @@ const App: React.FC = () => {
         translated={translated}
         onTranslation={() => setTranslated((value) => !value)}
         onLyrics={() => {
-          setVisible((value) => !value);
+          lyrics.toggle();
+          if (!lyrics.automatic) setPreferred(!visible);
           setActivePanel(visible ? "controls" : "lyrics");
           setDragOffsetX(0);
           setIsDragging(false);
