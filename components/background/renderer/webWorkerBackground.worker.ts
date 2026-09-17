@@ -1,4 +1,6 @@
 import { Mesh, prepare, palette, points, type Color } from "./mesh";
+import { Motion } from "./motion";
+import type { AudioEnvelope } from "@/services/audioEnvelope";
 
 // Web worker scope is typed explicitly because the app also includes DOM types.
 const scope = self as unknown as {
@@ -15,7 +17,7 @@ type Command =
   | { type: "colors"; colors: string[] }
   | { type: "play"; isPlaying: boolean }
   | { type: "pause"; paused: boolean }
-  | { type: "audio"; level: number }
+  | ({ type: "audio" } & AudioEnvelope)
   | { type: "coverImage"; imageData: ImageBitmap }
   | { type: "snapshot" | "watchFrame"; id: number }
   | { type: "clearCover" }
@@ -28,53 +30,95 @@ attribute vec2 uv;
 varying vec2 texcoord;
 varying vec3 pigment;
 uniform vec2 aspect;
+uniform vec2 orientation;
 void main() {
   pigment = color;
   texcoord = uv;
-  gl_Position = vec4(position * aspect, 0.0, 1.0);
+  // Rotate the surface independently of the artwork. A constant diagonal
+  // margin covers the viewport throughout a turn without rhythmic zooming.
+  mat2 turn = mat2(orientation.y, -orientation.x, orientation.x, orientation.y);
+  gl_Position = vec4(turn * position * 1.415 * aspect, 0.0, 1.0);
 }`;
 
 const FRAGMENT = `
 precision highp float;
 varying vec3 pigment;
 uniform float audio;
-uniform float time;
+uniform vec2 highlight;
+uniform vec2 rotation;
+uniform vec3 tension;
 uniform sampler2D artwork;
 uniform sampler2D previous;
 uniform float blend;
 uniform float coverage;
 varying vec2 texcoord;
-void main() {
-  // A tiny static dither prevents visible bands in the darkest smooth regions.
-  float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
-  // The cubic mesh defines the contours. Move the artwork through that mesh
-  // with one rigid rotation, avoiding a second competing distortion field.
-  vec2 q = texcoord - 0.5;
-  float angle = time * 0.24;
-  float s = sin(angle), c = cos(angle);
-  vec2 p = mat2(c, -s, s, c) * q + 0.5;
-  // Ease into edge extension with a continuous first derivative. This removes
-  // the crease created by abruptly clamping a rotating texture coordinate.
+vec2 extend(vec2 p) {
+  p = 1.0 - abs(mod(p, 2.0) - 1.0);
   vec2 low = clamp(p / 0.10, 0.0, 1.0);
   vec2 high = clamp((1.0 - p) / 0.10, 0.0, 1.0);
   p = mix(p, 0.10 * low * low * (2.0 - low), step(p, vec2(0.10)));
-  p = mix(p, 1.0 - 0.10 * high * high * (2.0 - high), step(vec2(0.90), p));
-  vec3 image = mix(texture2D(previous, p).rgb, texture2D(artwork, p).rgb, blend);
+  return mix(p, 1.0 - 0.10 * high * high * (2.0 - high), step(vec2(0.90), p));
+}
+vec3 cover(vec2 p) {
+  return mix(texture2D(previous, p).rgb, texture2D(artwork, p).rgb, blend);
+}
+void main() {
+  // A tiny static dither prevents visible bands in the darkest smooth regions.
+  float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+  vec2 q = texcoord - 0.5;
+  float s = rotation.x, c = rotation.y;
+  // Two offset views of the complete cover travel at different orientations.
+  // Mirrored continuation avoids the solid strips produced by edge clamping.
+  vec3 image = cover(extend(mat2(c, -s, s, c) * q * 2.0 + vec2(0.67, 0.62)));
+  vec3 echo = cover(extend(mat2(s, -c, c, s) * q * 1.65 + vec2(0.29, 0.61)));
+  // Broad neutral artwork regions should not wash out the entire surface.
+  // Reveal another view through moving, curved regions of the same mesh.
+  // All hues still come from the artwork, without a substituted palette.
+  float chroma = max(image.r, max(image.g, image.b)) - min(image.r, min(image.g, image.b));
+  // Briefly tighten one moving section of the contour, then let it relax.
+  // A finite transition retains smooth edges without an outlined color block.
+  vec2 offset = texcoord - tension.yz;
+  float width = mix(0.35, 0.025, tension.x *
+    (1.0 - smoothstep(0.025, 0.23, dot(offset, offset))));
+  // One open curve, with a single crossing along its local normal. Unlike
+  // multiplied waves, it cannot create crossing seams or enclosed islands.
+  vec2 seam = mat2(c, -s, s, c) * q;
+  float line = seam.y - (0.52 + s * 0.16) * seam.x * seam.x - 0.2 * seam.x - 0.03;
+  float crossing = smoothstep(-width, width, line);
+  float relief = 0.72 * (1.0 - smoothstep(0.08, 0.24, chroma));
+  // Compose smooth weights instead of max(), which introduced extra creases
+  // wherever the neutral-artwork correction met the main contour.
+  image = mix(image, echo, relief + (1.0 - relief) * crossing);
   // Keep shading independent of hue and source luminance, preserving the
   // artwork's relative color areas. Elliptic falloff remains gentle at edges.
   float shade = 1.0 - 0.24 * smoothstep(0.08, 0.60, dot(q, q));
-  vec3 color = mix(pigment, image, coverage) * shade * (1.0 + audio * 0.035);
+  // Light only a local color region in mesh coordinates. Its footprint bends
+  // with the surface and ends along the existing crossing, not a screen-wide
+  // exposure pulse or a separate circular spotlight.
+  vec2 focus = mat2(c, -s, s, c) * (highlight - 0.5);
+  // A single finite arc segment is the beat target. Its along-curve falloff
+  // prevents a second spot or a screen-wide brightness pulse.
+  float edge = exp(-pow(line / mix(0.12, 0.075, tension.x), 2.0));
+  float along = exp(-pow((seam.x - focus.x) / 0.42, 2.0));
+  float light = edge * along;
+  vec3 color = mix(pigment, image, coverage) * shade * (1.0 + audio * light * 0.38);
   gl_FragColor = vec4(clamp(color + grain / 255.0, 0.0, 1.0), 1.0);
 }`;
 
 const mesh = new Mesh();
+const positions = points(0);
+const motion = new Motion();
+const signal: AudioEnvelope = { level: 0, bass: 0, onset: 0 };
 let gl: WebGLRenderingContext | null = null;
 let program: WebGLProgram | null = null;
 let vertices: WebGLBuffer | null = null;
 let indices: WebGLBuffer | null = null;
 let uniform: WebGLUniformLocation | null = null;
-let clock: WebGLUniformLocation | null = null;
+let highlight: WebGLUniformLocation | null = null;
+let rotation: WebGLUniformLocation | null = null;
+let tension: WebGLUniformLocation | null = null;
 let aspect: WebGLUniformLocation | null = null;
+let orientation: WebGLUniformLocation | null = null;
 let mix: WebGLUniformLocation | null = null;
 let opacity: WebGLUniformLocation | null = null;
 let texture: WebGLTexture | null = null;
@@ -90,8 +134,6 @@ let elapsed = 0;
 let playing = false;
 let paused = false;
 let dirty = true;
-let level = 0;
-let energy = 0;
 let target = palette([]);
 let origin = target.slice();
 const colors = target.slice();
@@ -157,9 +199,8 @@ const render = (now: number) => {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
   last = now;
   if (!paused) {
-    if (playing) elapsed += dt;
-    const next = playing ? level : 0;
-    energy += (next - energy) * (1 - Math.exp(-dt / (next > energy ? 0.12 : 0.55)));
+    motion.step(dt, playing, signal);
+    elapsed = motion.time;
     // Palette transitions use wall time, so selecting an album while paused
     // still updates the background. Motion uses a separate playback clock.
     transition = Math.min(1, transition + dt / 1.2);
@@ -168,12 +209,22 @@ const render = (now: number) => {
   }
   const blend = transition * transition * (3 - 2 * transition);
   for (let i = 0; i < colors.length; i++) colors[i] = origin[i] + (target[i] - origin[i]) * blend;
-  mesh.update(points(elapsed, energy), colors);
+  // Shape evolution is subordinate to the turn, avoiding horizontal/vertical
+  // sweeps that overpower the visible orbit of each color region.
+  mesh.update(points(elapsed * 0.45, 0, positions), colors);
   gl.useProgram(program);
   gl.bindBuffer(gl.ARRAY_BUFFER, vertices);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, mesh.vertices);
-  gl.uniform1f(uniform, energy);
-  gl.uniform1f(clock, elapsed);
+  gl.uniform1f(uniform, motion.climax);
+  gl.uniform2f(highlight, 0.5 + 0.1 * Math.sin(elapsed * 0.08 + 0.6), 0.5 + 0.1 * Math.cos(elapsed * 0.061 + 1.4));
+  gl.uniform2f(orientation, Math.sin(motion.angle), Math.cos(motion.angle));
+  const swing = 0.22 * Math.sin(elapsed * 0.105) + 0.08 * Math.cos(elapsed * 0.067) - 0.08;
+  gl.uniform2f(rotation, Math.sin(swing), Math.cos(swing));
+  gl.uniform3f(tension,
+    Math.pow(Math.max(0, Math.sin(elapsed * 0.29 - 0.7)), 4),
+    0.5 + 0.2 * Math.sin(elapsed * 0.13 + 0.9),
+    0.5 + 0.2 * Math.cos(elapsed * 0.17 - 0.4),
+  );
   gl.uniform1f(mix, fade * fade * (3 - 2 * fade));
   gl.uniform1f(opacity, coverage);
   gl.activeTexture(gl.TEXTURE0);
@@ -188,7 +239,7 @@ const render = (now: number) => {
 };
 
 const loop = (now: number) => {
-  const unsettled = transition < 1 || fade < 1 || energy > 0.0001 || coverage !== Number(covered);
+  const unsettled = transition < 1 || fade < 1 || coverage !== Number(covered);
   if ((!paused && (playing || unsettled || dirty)) || watches.length) render(now);
   else last = now;
   frame = scope.requestAnimationFrame(loop);
@@ -253,8 +304,11 @@ scope.onmessage = ({ data }) => {
     gl.uniform1i(gl.getUniformLocation(program, "artwork"), 0);
     gl.uniform1i(gl.getUniformLocation(program, "previous"), 1);
     uniform = gl.getUniformLocation(program, "audio");
-    clock = gl.getUniformLocation(program, "time");
+    highlight = gl.getUniformLocation(program, "highlight");
+    rotation = gl.getUniformLocation(program, "rotation");
+    tension = gl.getUniformLocation(program, "tension");
     aspect = gl.getUniformLocation(program, "aspect");
+    orientation = gl.getUniformLocation(program, "orientation");
     mix = gl.getUniformLocation(program, "blend");
     opacity = gl.getUniformLocation(program, "coverage");
     indices = gl.createBuffer();
@@ -272,7 +326,12 @@ scope.onmessage = ({ data }) => {
   if (data.type === "resize") return resize(data.width, data.height);
   if (data.type === "play") { playing = data.isPlaying; return; }
   if (data.type === "pause") { paused = data.paused; last = performance.now(); return; }
-  if (data.type === "audio") { level = Number.isFinite(data.level) ? Math.max(0, Math.min(1, data.level)) : 0; return; }
+  if (data.type === "audio") {
+    for (const key of ["level", "bass", "onset"] as const) {
+      signal[key] = Number.isFinite(data[key]) ? Math.max(0, Math.min(1, data[key])) : 0;
+    }
+    return;
+  }
   if (data.type === "snapshot") return snapshot(data.id);
   if (data.type === "watchFrame") { watches.push(data.id); return; }
   if (data.type === "colors") {
