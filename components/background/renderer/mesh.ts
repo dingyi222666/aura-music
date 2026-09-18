@@ -4,7 +4,9 @@ import { fold, strength } from "./composition";
 // interior anchors through broad ribbon, cove, diagonal and fan compositions.
 // References and timing: docs/mesh-gradient.md. No runtime randomness.
 export const SIZE = 4;
-const STEPS = 64;
+// The surface is rasterized into a bounded 768px target. 32 samples per
+// Hermite cell are enough for smooth contours there and halve vertex work.
+const STEPS = 32;
 export const SIDE = (SIZE - 1) * STEPS + 1;
 const STRIDE = 8;
 export const DURATION = 8;
@@ -251,6 +253,39 @@ export const blur = (pixels: Uint8ClampedArray | Float32Array, size: number, sig
   return output;
 };
 
+// Kawase's four-diagonal taps are sufficient for the cover prepass. The
+// offsets grow per pass, giving a broad soft field with a fraction of the
+// samples used by a large Gaussian kernel.
+export const kawase = (pixels: Uint8ClampedArray | Float32Array, size: number, passes = 4): Uint8ClampedArray => {
+  let src = pixels instanceof Uint8ClampedArray ? pixels : Uint8ClampedArray.from(pixels);
+  const mirror = (v: number) => {
+    const n = ((v % (size * 2)) + size * 2) % (size * 2);
+    return n < size ? n : size * 2 - n - 1;
+  };
+  for (let pass = 0; pass < passes; pass++) {
+    const dst = new Uint8ClampedArray(src.length);
+    const offset = pass + 1;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const taps = [
+          [mirror(x - offset), mirror(y - offset)],
+          [mirror(x + offset), mirror(y - offset)],
+          [mirror(x - offset), mirror(y + offset)],
+          [mirror(x + offset), mirror(y + offset)],
+        ];
+        for (let c = 0; c < 3; c++) {
+          let value = 0;
+          for (const [tx, ty] of taps) value += src[(ty * size + tx) * 4 + c];
+          dst[(y * size + x) * 4 + c] = value * 0.25;
+        }
+        dst[(y * size + x) * 4 + 3] = 255;
+      }
+    }
+    src = dst;
+  }
+  return src;
+};
+
 // Process the actual cover in place: compress luminance and expand chroma.
 // A shared gamut limit preserves hue instead of independently clipping channels.
 export const prepare = (pixels: Uint8ClampedArray, size: number): Uint8ClampedArray => {
@@ -268,8 +303,8 @@ export const prepare = (pixels: Uint8ClampedArray, size: number): Uint8ClampedAr
     for (let c = 0; c < 3; c++) data[i + c] = (tone + (pixels[i + c] / 255 - luma) * gain) * 255 * alpha;
     data[i + 3] = 255;
   }
-  // Remove faces and lettering before deformation. A broad source blur keeps
-  // the cover's color regions without stretching recognizable subjects; the
-  // much lighter final blur preserves boundaries created by the mesh itself.
-  return blur(data, size, Math.max(0.5, size * 0.15));
+  // Remove faces and lettering before deformation. This Kawase-style
+  // low-resolution preblur keeps the cover's color regions without stretching
+  // recognizable subjects, and is paid only once per cover.
+  return kawase(data, size, 4);
 };

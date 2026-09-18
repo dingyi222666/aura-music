@@ -11,38 +11,23 @@ precision highp float;
 in vec2 uv;
 uniform sampler2D image;
 out vec4 outputColor;
-uniform vec2 step;
-uniform float mode;
 void main() {
-  vec3 color = vec3(0.0);
-  if (mode < 0.5) {
-    float total = 0.0;
-    for (int i = -12; i <= 12; i++) {
-      float weight = exp(-float(i * i) / 32.0);
-      color += texture(image, uv + step * float(i)).rgb * weight;
-      total += weight;
-    }
-    color /= total;
-  } else {
-    color = texture(image, uv).rgb;
-    float shade = 0.86 - 0.12 * smoothstep(0.12, 0.65, length(uv - 0.5));
-    float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
-    color = color * shade + grain / 255.0;
-  }
+  vec3 color = texture(image, uv).rgb;
+  float shade = 0.86 - 0.12 * smoothstep(0.12, 0.65, length(uv - 0.5));
+  float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+  color = color * shade + grain / 255.0;
   outputColor = vec4(color, 1.0);
 }`;
 
-// Blur the composed, deformed image in screen space. A bounded render target
-// keeps the two Gaussian passes cheap on mobile; only the final copy is full size.
+// Hold the low-resolution composition before the final full-size copy. The
+// artwork itself is pre-blurred once when a cover arrives.
 export class Blur {
-  width = 1;
-  height = 1;
+  width = 0;
+  height = 0;
   private readonly program: WebGLProgram;
   private readonly depth: WebGLRenderbuffer;
   private readonly vao: WebGLVertexArrayObject;
   private readonly targets: { texture: WebGLTexture; buffer: WebGLFramebuffer }[];
-  private readonly step: WebGLUniformLocation | null;
-  private readonly mode: WebGLUniformLocation | null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {
     this.program = gl.createProgram()!;
@@ -62,14 +47,12 @@ export class Blur {
     if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
       throw new Error(gl.getProgramInfoLog(this.program) ?? "Background blur link failed");
     }
-    this.step = gl.getUniformLocation(this.program, "step");
-    this.mode = gl.getUniformLocation(this.program, "mode");
     this.vao = gl.createVertexArray()!;
     gl.bindVertexArray(this.vao);
     gl.bindVertexArray(null);
     this.depth = gl.createRenderbuffer()!;
     gl.bindRenderbuffer(gl.RENDERBUFFER, this.depth);
-    this.targets = Array.from({ length: 2 }, () => {
+    this.targets = Array.from({ length: 1 }, () => {
       const texture = gl.createTexture()!;
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -87,9 +70,15 @@ export class Blur {
 
   resize(width: number, height: number) {
     const gl = this.gl;
-    const scale = Math.min(1, 512 / Math.max(width, height));
-    this.width = Math.max(1, Math.round(width * scale));
-    this.height = Math.max(1, Math.round(height * scale));
+    // Keep enough pixels for the fold edge. The artwork source is still
+    // 128px and Kawase-blurred once; only the deformed contour gets this
+    // higher-resolution target.
+    const scale = Math.min(1, 768 / Math.max(width, height));
+    const w = Math.max(1, Math.round(width * scale));
+    const h = Math.max(1, Math.round(height * scale));
+    if (w === this.width && h === this.height) return;
+    this.width = w;
+    this.height = h;
     gl.bindRenderbuffer(gl.RENDERBUFFER, this.depth);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, this.width, this.height);
     for (const target of this.targets) {
@@ -116,16 +105,13 @@ export class Blur {
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
     gl.activeTexture(gl.TEXTURE0);
-    // sigma = 0.45% of the short edge, independent of screen orientation.
-    const stride = Math.min(this.width, this.height) * 0.0045 / 4;
-    for (let i = 0; i < 3; i++) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, i === 2 ? null : this.targets[1 - i].buffer);
-      gl.bindTexture(gl.TEXTURE_2D, this.targets[i % 2].texture);
-      gl.uniform2f(this.step, i === 0 ? stride / this.width : 0, i === 1 ? stride / this.height : 0);
-      gl.uniform1f(this.mode, i === 2 ? 1 : 0);
-      if (i === 2) gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    }
+    // Artwork is blurred once during cover preparation. The animation pass
+    // only upscales that low-resolution result, keeping the flow at a stable
+    // 60 FPS without paying for a full separable blur every frame.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, this.targets[0].texture);
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
   dispose() {

@@ -64,7 +64,7 @@ vec2 surfaceAt(vec2 point) {
 float foldAmount(float y) {
   float d = (y - foldB.x) / foldB.y;
   float w = max(0.0, 1.0 - d * d);
-  return foldA.z * w * w;
+  return foldA.z * 0.78 * w * w;
 }
 float foldX(float x, float y) {
   float amount = foldAmount(y);
@@ -77,7 +77,9 @@ float foldX(float x, float y) {
 }
 vec2 mapPoint(vec2 point) {
   float amount = min(1.0, foldAmount(point.y) / foldA.w);
-  float blendAmount = amount * amount * (3.0 - 2.0 * amount) * 0.90;
+  // Keep the folded sheet dominant through the arc; only feather its outer
+  // edge back to the moving surface so the contour stays crisp after upscale.
+  float blendAmount = amount * amount * (3.0 - 2.0 * amount) * 0.62;
   float x = clamp(foldX(point.x, point.y), 0.0, 1.0);
   vec2 curved = surfaceAt(vec2(x, point.y));
   curved = vec2(curved.x * 2.0 - 1.0, 1.0 - curved.y * 2.0);
@@ -137,17 +139,22 @@ void main() {
   vec2 flow = uv + vec2(
     sin(uv.y * 3.1 + time * 0.065),
     cos(uv.x * 2.8 - time * 0.055)
-  ) * 0.14;
+  ) * 0.11;
+  // Keep the broad field moving, but avoid a high-frequency ripple where the
+  // displacement and local twists reinforce each other.
+  float bend = sin(uv.y * 2.2 + time * 0.12) * 0.10 +
+    cos(uv.x * 1.7 - time * 0.09) * 0.07;
+  flow = turn(bend) * (flow - 0.5) + 0.5;
   flow = twist(flow, vec4(twists[0].xyz, twists[0].w * 0.55));
   flow = twist(flow, vec4(twists[1].xyz, twists[1].w * 0.4));
   // Reorient the full cover as it flows, changing which color regions meet.
   // The varying angular speed and local twists keep this from a rigid spin.
-  float angle = time * 0.10 + sin(time * 0.16) * 0.42;
-  vec2 center = vec2(0.5) + vec2(sin(time * 0.09), cos(time * 0.12)) * 0.06;
-  vec3 image = cover(turn(angle) * (flow - center) * 1.15 + center + drift);
+  float angle = time * 0.14 + sin(time * 0.16) * 0.72 + sin(time * 0.071) * 0.30;
+  vec2 center = vec2(0.5) + vec2(sin(time * 0.09), cos(time * 0.12)) * 0.09;
+  vec3 image = cover(turn(angle) * (flow - center) * 1.16 + center + drift);
   float light = exp(-dot(uv - twists[0].xy, uv - twists[0].xy) * 8.0);
-  // Final screen-space blur, exposure and dithering are applied after the
-  // mesh is rasterized. Source color enhancement happens once at image upload.
+  // The low-resolution source is softened once at image upload; the final pass
+  // only applies coverage and the audio-aware lift.
   outputColor = vec4(mix(pigment, image, coverage) * (1.0 + audio * light * 0.08), 1.0);
 }`;
 
@@ -155,6 +162,7 @@ const mesh = new Mesh();
 const positions = points(0);
 const twists = new Float32Array(8);
 const seed = Math.floor(Math.random() * 0x7fffffff);
+const COVER_SIZE = 128;
 const creases = crease(0);
 const motion = new Motion();
 const signal: AudioEnvelope = { level: 0, bass: 0, onset: 0 };
@@ -323,6 +331,7 @@ const snapshot = (id: number) => {
 scope.onmessage = ({ data }) => {
   if (data.type === "dispose") {
     scope.cancelAnimationFrame(frame);
+    gl?.finish();
     gl?.deleteVertexArray(vao);
     gl?.deleteBuffer(vertices);
     gl?.deleteBuffer(indices);
@@ -409,25 +418,25 @@ scope.onmessage = ({ data }) => {
   }
   if (data.type === "coverImage") {
     try {
-      const canvas = new OffscreenCanvas(64, 64);
+      const canvas = new OffscreenCanvas(COVER_SIZE, COVER_SIZE);
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (ctx) {
-        ctx.drawImage(data.imageData, 0, 0, 64, 64);
-        const raw = ctx.getImageData(0, 0, 64, 64).data;
-        const next = prepare(raw, 64);
+        ctx.drawImage(data.imageData, 0, 0, COVER_SIZE, COVER_SIZE);
+        const raw = ctx.getImageData(0, 0, COVER_SIZE, COVER_SIZE).data;
+        const next = prepare(raw, COVER_SIZE);
         // Interrupted song transitions begin at the image currently on screen,
         // rather than jumping to the preceding track's fully resolved cover.
         if (pixels && before && fade < 1) {
           const amount = fade * fade * (3 - 2 * fade);
           pixels = pixels.map((value, i) => before![i] + (value - before![i]) * amount);
           gl?.deleteTexture(texture);
-          texture = upload(pixels, 64);
+          texture = upload(pixels, COVER_SIZE);
         }
         gl?.deleteTexture(previous);
         previous = texture;
         before = pixels;
         pixels = next;
-        texture = upload(next, 64);
+        texture = upload(next, COVER_SIZE);
         fade = covered ? 0 : 1;
         covered = true;
       }
