@@ -1,4 +1,4 @@
-import { Mesh, prepare, palette, points, type Color } from "./mesh";
+import { Mesh, SIDE, prepare, palette, points, type Color } from "./mesh";
 import { compose, crease } from "./composition";
 import { Motion } from "./motion";
 import { Blur } from "./postprocess";
@@ -25,26 +25,90 @@ type Command =
   | { type: "clearCover" }
   | { type: "dispose" };
 
-const VERTEX = `
-attribute vec2 position;
-attribute vec2 uv;
-attribute vec3 color;
-varying vec2 texcoord;
-varying vec3 pigment;
+const VERTEX = `#version 300 es
+in vec2 uv;
+out vec2 texcoord;
+out vec3 pigment;
+uniform vec3 colors[16];
 uniform vec2 aspect;
+uniform vec2 surface[64];
+uniform vec4 foldA;
+uniform vec3 foldB;
+vec4 basis(float t) {
+  return vec4(2.0 * t * t * t - 3.0 * t * t + 1.0,
+    -2.0 * t * t * t + 3.0 * t * t,
+    t * t * t - 2.0 * t * t + t,
+    t * t * t - t * t);
+}
+vec2 surfaceAt(vec2 point) {
+  float gx = clamp(point.x * 3.0, 0.0, 3.0);
+  float gy = clamp(point.y * 3.0, 0.0, 3.0);
+  int cx = min(2, int(floor(gx)));
+  int cy = min(2, int(floor(gy)));
+  vec4 bx = basis(gx - float(cx));
+  vec4 by = basis(gy - float(cy));
+  vec2 result = vec2(0.0);
+  for (int j = 0; j < 2; j++) {
+    for (int i = 0; i < 2; i++) {
+      int p = (cy + j) * 4 + cx + i;
+      vec2 pos = surface[p * 4];
+      vec2 du = surface[p * 4 + 1];
+      vec2 dv = surface[p * 4 + 2];
+      vec2 duv = surface[p * 4 + 3];
+      result += pos * bx[i] * by[j] + du * bx[i + 2] * by[j] +
+        dv * bx[i] * by[j + 2] + duv * bx[i + 2] * by[j + 2];
+    }
+  }
+  return result;
+}
+float foldAmount(float y) {
+  float d = (y - foldB.x) / foldB.y;
+  float w = max(0.0, 1.0 - d * d);
+  return foldA.z * w * w;
+}
+float foldX(float x, float y) {
+  float amount = foldAmount(y);
+  if (amount <= 0.0) return x;
+  float center = foldA.x + foldA.y * (y - foldB.x) +
+    foldB.z * ((y - foldB.x) / foldB.y) * ((y - foldB.x) / foldB.y);
+  float left = amount * tanh(center / foldA.w);
+  float right = 1.0 - amount * tanh((1.0 - center) / foldA.w);
+  return (x - amount * tanh((x - center) / foldA.w) - left) / (right - left);
+}
+vec2 mapPoint(vec2 point) {
+  float amount = min(1.0, foldAmount(point.y) / foldA.w);
+  float blendAmount = amount * amount * (3.0 - 2.0 * amount) * 0.90;
+  float x = clamp(foldX(point.x, point.y), 0.0, 1.0);
+  vec2 curved = surfaceAt(vec2(x, point.y));
+  curved = vec2(curved.x * 2.0 - 1.0, 1.0 - curved.y * 2.0);
+  vec2 plane = vec2(x * 2.0 - 1.0, 1.0 - point.y * 2.0);
+  return curved * (1.0 - blendAmount) + plane * blendAmount;
+}
+vec3 colorAt(vec2 point) {
+  float gx = clamp(point.x * 3.0, 0.0, 3.0);
+  float gy = clamp(point.y * 3.0, 0.0, 3.0);
+  int cx = min(2, int(floor(gx)));
+  int cy = min(2, int(floor(gy)));
+  vec4 bx = basis(gx - float(cx));
+  vec4 by = basis(gy - float(cy));
+  vec3 result = vec3(0.0);
+  for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
+    result += colors[(cy + j) * 4 + cx + i] * bx[i] * by[j];
+  }
+  return result;
+}
 void main() {
   texcoord = uv;
-  pigment = color;
-  // Fixed surface framing leaves the motion to local control points.
-  // A consistent front sheet prevents intersecting rows from painting over
-  // each other according to triangle submission order.
-  gl_Position = vec4(position * 1.05 * aspect, 0.8 - uv.x * 1.6, 1.0);
+  pigment = colorAt(uv);
+  vec2 mapped = mapPoint(uv);
+  gl_Position = vec4(mapped * 1.05 * aspect, 0.8 - uv.x * 1.6, 1.0);
 }`;
 
-const FRAGMENT = `
+const FRAGMENT = `#version 300 es
 precision highp float;
-varying vec2 texcoord;
-varying vec3 pigment;
+in vec2 texcoord;
+in vec3 pigment;
+out vec4 outputColor;
 uniform float audio;
 uniform float time;
 uniform vec4 twists[2];
@@ -63,7 +127,7 @@ vec2 twist(vec2 uv, vec4 control) {
 }
 vec3 cover(vec2 uv) {
   uv = 1.0 - abs(mod(uv, 2.0) - 1.0);
-  return mix(texture2D(previous, uv).rgb, texture2D(artwork, uv).rgb, blend);
+  return mix(texture(previous, uv).rgb, texture(artwork, uv).rgb, blend);
 }
 void main() {
   vec2 uv = texcoord;
@@ -84,7 +148,7 @@ void main() {
   float light = exp(-dot(uv - twists[0].xy, uv - twists[0].xy) * 8.0);
   // Final screen-space blur, exposure and dithering are applied after the
   // mesh is rasterized. Source color enhancement happens once at image upload.
-  gl_FragColor = vec4(mix(pigment, image, coverage) * (1.0 + audio * light * 0.08), 1.0);
+  outputColor = vec4(mix(pigment, image, coverage) * (1.0 + audio * light * 0.08), 1.0);
 }`;
 
 const mesh = new Mesh();
@@ -94,14 +158,18 @@ const seed = Math.floor(Math.random() * 0x7fffffff);
 const creases = crease(0);
 const motion = new Motion();
 const signal: AudioEnvelope = { level: 0, bass: 0, onset: 0 };
-let gl: WebGLRenderingContext | null = null;
+let gl: WebGL2RenderingContext | null = null;
 let program: WebGLProgram | null = null;
 let blur: Blur | null = null;
-const attributes: number[] = [];
 let vertices: WebGLBuffer | null = null;
 let indices: WebGLBuffer | null = null;
+let vao: WebGLVertexArrayObject | null = null;
 let uniform: WebGLUniformLocation | null = null;
 let controls: WebGLUniformLocation | null = null;
+let surface: WebGLUniformLocation | null = null;
+let colorsUniform: WebGLUniformLocation | null = null;
+let foldA: WebGLUniformLocation | null = null;
+let foldB: WebGLUniformLocation | null = null;
 let clock: WebGLUniformLocation | null = null;
 let aspect: WebGLUniformLocation | null = null;
 let mix: WebGLUniformLocation | null = null;
@@ -200,19 +268,17 @@ const render = (now: number) => {
   crease(elapsed, creases, seed);
   // Keep the local fold's height bounded in screen space on wide displays too.
   const ratio = Math.max(1, gl.canvas.width / gl.canvas.height);
-  creases[4] = 0.5 + (creases[4] - 0.5) / ratio;
-  creases[5] /= ratio;
-  mesh.update(points(elapsed, 0, positions), colors, creases);
+  const cy = 0.5 + (creases[4] - 0.5) / ratio;
+  const ry = creases[5] / ratio;
+  points(elapsed, 0, positions);
   compose(elapsed, twists);
   gl.useProgram(program);
   blur?.begin();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertices);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
-  for (let i = 0; i < attributes.length; i++) {
-    gl.enableVertexAttribArray(attributes[i]);
-    gl.vertexAttribPointer(attributes[i], i === 1 ? 3 : 2, gl.FLOAT, false, 28, [0, 8, 20][i]);
-  }
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, mesh.vertices);
+  gl.bindVertexArray(vao);
+  gl.uniform2fv(surface, positions);
+  gl.uniform3fv(colorsUniform, colors);
+  gl.uniform4f(foldA, creases[0], creases[1], creases[2], creases[3]);
+  gl.uniform3f(foldB, cy, ry, creases[6]);
   gl.uniform1f(uniform, motion.climax);
   gl.uniform4fv(controls, twists);
   gl.uniform1f(clock, elapsed);
@@ -224,7 +290,6 @@ const render = (now: number) => {
   gl.bindTexture(gl.TEXTURE_2D, previous);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.drawElements(gl.TRIANGLES, mesh.indices.length, gl.UNSIGNED_SHORT, 0);
-  for (const attribute of attributes) gl.disableVertexAttribArray(attribute);
   blur?.draw();
   dirty = false;
   for (const id of watches) scope.postMessage({ type: "frame", id });
@@ -258,6 +323,7 @@ const snapshot = (id: number) => {
 scope.onmessage = ({ data }) => {
   if (data.type === "dispose") {
     scope.cancelAnimationFrame(frame);
+    gl?.deleteVertexArray(vao);
     gl?.deleteBuffer(vertices);
     gl?.deleteBuffer(indices);
     gl?.deleteProgram(program);
@@ -269,8 +335,8 @@ scope.onmessage = ({ data }) => {
     return;
   }
   if (data.type === "init") {
-    gl = data.canvas.getContext("webgl", { alpha: false, antialias: false });
-    if (!gl) throw new Error("WebGL unavailable for mesh background");
+    gl = data.canvas.getContext("webgl2", { alpha: false, antialias: false });
+    if (!gl) throw new Error("WebGL2 unavailable for mesh background");
     const vs = compile(gl.VERTEX_SHADER, VERTEX);
     const fs = compile(gl.FRAGMENT_SHADER, FRAGMENT);
     program = gl.createProgram()!;
@@ -281,16 +347,29 @@ scope.onmessage = ({ data }) => {
     gl.deleteShader(fs);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) ?? "Mesh link failed");
     gl.useProgram(program);
+    vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
     vertices = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertices);
-    gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices.byteLength, gl.DYNAMIC_DRAW);
-    attributes.push(...["position", "color", "uv"].map((name) => gl!.getAttribLocation(program!, name)));
+    const coords = new Float32Array(SIDE * SIDE * 2);
+    for (let i = 0; i < SIDE * SIDE; i++) {
+      coords[i * 2] = mesh.vertices[i * 7 + 5];
+      coords[i * 2 + 1] = mesh.vertices[i * 7 + 6];
+    }
+    gl.bufferData(gl.ARRAY_BUFFER, coords, gl.STATIC_DRAW);
+    const uv = gl.getAttribLocation(program, "uv");
+    gl.enableVertexAttribArray(uv);
+    gl.vertexAttribPointer(uv, 2, gl.FLOAT, false, 0, 0);
     texture = upload(new Uint8ClampedArray([0, 0, 0, 255]), 1);
     previous = upload(new Uint8ClampedArray([0, 0, 0, 255]), 1);
     gl.uniform1i(gl.getUniformLocation(program, "artwork"), 0);
     gl.uniform1i(gl.getUniformLocation(program, "previous"), 1);
     uniform = gl.getUniformLocation(program, "audio");
     controls = gl.getUniformLocation(program, "twists[0]");
+    surface = gl.getUniformLocation(program, "surface[0]");
+    colorsUniform = gl.getUniformLocation(program, "colors[0]");
+    foldA = gl.getUniformLocation(program, "foldA");
+    foldB = gl.getUniformLocation(program, "foldB");
     clock = gl.getUniformLocation(program, "time");
     aspect = gl.getUniformLocation(program, "aspect");
     mix = gl.getUniformLocation(program, "blend");
@@ -298,6 +377,7 @@ scope.onmessage = ({ data }) => {
     indices = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
     gl.clearColor(0.008, 0.008, 0.01, 1);
     blur = new Blur(gl);
     resize(data.width, data.height);

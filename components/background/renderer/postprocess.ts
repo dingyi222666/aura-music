@@ -1,34 +1,35 @@
-const VERTEX = `
-attribute vec2 position;
-varying vec2 uv;
+const VERTEX = `#version 300 es
+out vec2 uv;
 void main() {
-  uv = position * 0.5 + 0.5;
-  gl_Position = vec4(position, 0.0, 1.0);
+  vec2 position = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  uv = position;
+  gl_Position = vec4(position * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-const FRAGMENT = `
+const FRAGMENT = `#version 300 es
 precision highp float;
-varying vec2 uv;
+in vec2 uv;
 uniform sampler2D image;
+out vec4 outputColor;
 uniform vec2 step;
-uniform float finish;
+uniform float mode;
 void main() {
   vec3 color = vec3(0.0);
-  if (finish > 0.5) {
-    color = texture2D(image, uv).rgb;
-    float shade = 0.86 - 0.12 * smoothstep(0.12, 0.65, length(uv - 0.5));
-    float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
-    color = color * shade + grain / 255.0;
-  } else {
+  if (mode < 0.5) {
     float total = 0.0;
     for (int i = -12; i <= 12; i++) {
       float weight = exp(-float(i * i) / 32.0);
-      color += texture2D(image, uv + step * float(i)).rgb * weight;
+      color += texture(image, uv + step * float(i)).rgb * weight;
       total += weight;
     }
     color /= total;
+  } else {
+    color = texture(image, uv).rgb;
+    float shade = 0.86 - 0.12 * smoothstep(0.12, 0.65, length(uv - 0.5));
+    float grain = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    color = color * shade + grain / 255.0;
   }
-  gl_FragColor = vec4(color, 1.0);
+  outputColor = vec4(color, 1.0);
 }`;
 
 // Blur the composed, deformed image in screen space. A bounded render target
@@ -38,12 +39,12 @@ export class Blur {
   height = 1;
   private readonly program: WebGLProgram;
   private readonly depth: WebGLRenderbuffer;
-  private readonly quad: WebGLBuffer;
+  private readonly vao: WebGLVertexArrayObject;
   private readonly targets: { texture: WebGLTexture; buffer: WebGLFramebuffer }[];
   private readonly step: WebGLUniformLocation | null;
-  private readonly finish: WebGLUniformLocation | null;
+  private readonly mode: WebGLUniformLocation | null;
 
-  constructor(private readonly gl: WebGLRenderingContext) {
+  constructor(private readonly gl: WebGL2RenderingContext) {
     this.program = gl.createProgram()!;
     for (const [kind, source] of [[gl.VERTEX_SHADER, VERTEX], [gl.FRAGMENT_SHADER, FRAGMENT]] as const) {
       const shader = gl.createShader(kind)!;
@@ -57,16 +58,15 @@ export class Blur {
       gl.attachShader(this.program, shader);
       gl.deleteShader(shader);
     }
-    gl.bindAttribLocation(this.program, 0, "position");
     gl.linkProgram(this.program);
     if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
       throw new Error(gl.getProgramInfoLog(this.program) ?? "Background blur link failed");
     }
     this.step = gl.getUniformLocation(this.program, "step");
-    this.finish = gl.getUniformLocation(this.program, "finish");
-    this.quad = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+    this.mode = gl.getUniformLocation(this.program, "mode");
+    this.vao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.vao);
+    gl.bindVertexArray(null);
     this.depth = gl.createRenderbuffer()!;
     gl.bindRenderbuffer(gl.RENDERBUFFER, this.depth);
     this.targets = Array.from({ length: 2 }, () => {
@@ -103,7 +103,8 @@ export class Blur {
   }
 
   begin() {
-    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.targets[0].buffer);
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[0].buffer);
     this.gl.viewport(0, 0, this.width, this.height);
     this.gl.enable(this.gl.DEPTH_TEST);
     this.gl.depthFunc(this.gl.LESS);
@@ -113,9 +114,7 @@ export class Blur {
     const gl = this.gl;
     gl.disable(gl.DEPTH_TEST);
     gl.useProgram(this.program);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(this.vao);
     gl.activeTexture(gl.TEXTURE0);
     // sigma = 0.45% of the short edge, independent of screen orientation.
     const stride = Math.min(this.width, this.height) * 0.0045 / 4;
@@ -123,16 +122,16 @@ export class Blur {
       gl.bindFramebuffer(gl.FRAMEBUFFER, i === 2 ? null : this.targets[1 - i].buffer);
       gl.bindTexture(gl.TEXTURE_2D, this.targets[i % 2].texture);
       gl.uniform2f(this.step, i === 0 ? stride / this.width : 0, i === 1 ? stride / this.height : 0);
-      gl.uniform1f(this.finish, i === 2 ? 1 : 0);
+      gl.uniform1f(this.mode, i === 2 ? 1 : 0);
       if (i === 2) gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
   }
 
   dispose() {
     this.gl.deleteRenderbuffer(this.depth);
     this.gl.deleteProgram(this.program);
-    this.gl.deleteBuffer(this.quad);
+    this.gl.deleteVertexArray(this.vao);
     for (const target of this.targets) {
       this.gl.deleteTexture(target.texture);
       this.gl.deleteFramebuffer(target.buffer);
