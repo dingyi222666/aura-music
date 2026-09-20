@@ -1,6 +1,27 @@
 import { expect, test } from "bun:test";
-import { compose, compositions, crease, fold, bend, strength, PERIOD } from "../components/background/renderer/composition";
-import { Mesh, points, sample, palette, blur, prepare, SIZE, SIDE, DURATION, layouts } from "../components/background/renderer/mesh";
+import { compose, compositions, crease, fold, bend, strength, PERIOD } from "@aura-music/background/renderer/composition";
+import { Mesh, points, sample, palette, blur, prepare, SIZE, SIDE, DURATION, layouts } from "@aura-music/background/renderer/mesh";
+
+test("tiled indices cover every cell once with the original diagonal and winding", () => {
+  const mesh = new Mesh();
+  const cells = new Uint8Array((SIDE - 1) ** 2);
+  for (let i = 0; i < mesh.indices.length; i += 3) {
+    const triangle = Array.from(mesh.indices.subarray(i, i + 3));
+    const x = triangle.map((p) => p % SIDE);
+    const y = triangle.map((p) => Math.floor(p / SIDE));
+    const left = Math.min(...x), top = Math.min(...y);
+    expect(Math.max(...x) - left).toBe(1);
+    expect(Math.max(...y) - top).toBe(1);
+    expect((x[1] - x[0]) * (y[2] - y[0]) - (y[1] - y[0]) * (x[2] - x[0])).toBe(1);
+    const sum = x.reduce((a, b) => a + b, 0) + y.reduce((a, b) => a + b, 0) - 3 * (left + top);
+    expect([2, 4]).toContain(sum);
+    const bit = sum === 2 ? 1 : 2;
+    const cell = top * (SIDE - 1) + left;
+    expect(cells[cell] & bit).toBe(0);
+    cells[cell] |= bit;
+  }
+  expect(cells.every((value) => value === 3)).toBe(true);
+});
 
 test("adjacent cubic patches agree in value and first derivative", () => {
   const data = points(7.2, 0.8);

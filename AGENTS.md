@@ -11,11 +11,12 @@ It applies to the entire tree under the repo root.
 
 - Frontend-only React + Vite + TypeScript application.
 - Default branch is `main`; use `main` or `origin/main` for diffs.
-- No monorepo structure; everything lives at the repo root.
+- Bun monorepo: main application in `apps/web-player`; reusable source packages in `packages/{core,player,view,lyrics,background,visualizer}`.
+- Import another workspace through its declared `@aura-music/*` exports. Libraries must not import the app.
 - There are currently **no** `.cursor/rules`, `.cursorrules`, or
   `.github/copilot-instructions.md` files. If they are added later, follow
   them in addition to this file.
-- Path alias: `@` resolves to the project root (see `tsconfig.json`).
+- App alias `@` resolves to `apps/web-player/src`; libraries use package exports or relative imports.
 
 ## Tooling & Commands
 
@@ -271,7 +272,7 @@ const table = sqliteTable("session", {
 
 ## Vite, Env, and Paths
 
-- Vite config lives in `vite.config.ts` and uses `loadEnv` to inject
+- Vite config lives in `apps/web-player/vite.config.ts` and uses `loadEnv` to inject
   environment variables.
 - Only public `VITE_` environment variables are loaded; never expose secrets
   in the client bundle.

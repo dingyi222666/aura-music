@@ -4,8 +4,8 @@ import {
   parseLibrarySnapshot,
   parsePlaybackSnapshot,
   toStoredSong,
-} from "../services/libraryStore";
-import { PlayMode, Song } from "../types";
+} from "@aura-music/player/services/libraryStore";
+import { PlayMode, Song } from "@aura-music/core/types";
 
 test("remote songs keep their original source url", () => {
   const song: Song = {

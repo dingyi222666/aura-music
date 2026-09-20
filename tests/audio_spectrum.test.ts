@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Spectrum } from "../services/audioSpectrum";
+import { Spectrum } from "@aura-music/core/audioSpectrum";
 
 const tone = (frequency: number, amplitude = 0.2, rate = 48000) =>
   Float32Array.from({ length: 4096 }, (_, i) => amplitude * Math.sin(2 * Math.PI * frequency * i / rate));

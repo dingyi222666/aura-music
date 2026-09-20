@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { LyricTransition } from "../components/lyrics/LyricTransition";
-import type { Layout } from "../components/lyrics/LyricsEngine";
-import type { ILyricLine } from "../components/lyrics/ILyricLine";
+import { LyricTransition } from "@aura-music/lyrics/renderer/LyricTransition";
+import type { Layout } from "@aura-music/lyrics/renderer/LyricsEngine";
+import type { ILyricLine } from "@aura-music/lyrics/renderer/ILyricLine";
 
 const layout = (height: number, width = 600): Layout => ({
   width,

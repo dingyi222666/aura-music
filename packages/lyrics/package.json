@@ -1,0 +1,49 @@
+{
+  "name": "@aura-music/lyrics",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./LyricsView": "./src/LyricsView.tsx",
+    "./parser/index": "./src/parser/index.ts",
+    "./parser/lrc": "./src/parser/lrc.ts",
+    "./parser/netease": "./src/parser/netease.ts",
+    "./parser/parser": "./src/parser/parser.ts",
+    "./parser/timeline": "./src/parser/timeline.ts",
+    "./parser/translation": "./src/parser/translation.ts",
+    "./parser/ttml": "./src/parser/ttml.ts",
+    "./parser/types": "./src/parser/types.ts",
+    "./parser/utils": "./src/parser/utils.ts",
+    "./parser/visibility": "./src/parser/visibility.ts",
+    "./renderer/GlyphCache": "./src/renderer/GlyphCache.ts",
+    "./renderer/ILyricLine": "./src/renderer/ILyricLine.ts",
+    "./renderer/InterludeDots": "./src/renderer/InterludeDots.ts",
+    "./renderer/LineAnimation": "./src/renderer/LineAnimation.ts",
+    "./renderer/LyricLine": "./src/renderer/LyricLine.ts",
+    "./renderer/LyricReveal": "./src/renderer/LyricReveal.ts",
+    "./renderer/LyricTransition": "./src/renderer/LyricTransition.ts",
+    "./renderer/LyricsEngine": "./src/renderer/LyricsEngine.ts",
+    "./renderer/LyricsMotion": "./src/renderer/LyricsMotion.ts",
+    "./renderer/LyricsRenderer": "./src/renderer/LyricsRenderer.ts",
+    "./useLyricVisibility": "./src/useLyricVisibility.ts"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aura-music/core": "workspace:*",
+    "fast-xml-parser": "^4.5.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

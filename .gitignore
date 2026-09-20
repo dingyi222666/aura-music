@@ -32,7 +32,8 @@ tests/*
 !tests/audio_motion.test.ts
 !tests/audio_spectrum.test.ts
 !tests/lyric_visibility.test.ts
-bun.lock
+!tests/glass.test.ts
+!tests/workspaces.test.ts
 
 # Local renderer comparison bundles and fixtures
 .background-review/

@@ -1,0 +1,29 @@
+{
+  "name": "@aura-music/visualizer",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./AudioProcessor": "./src/AudioProcessor.ts",
+    "./Visualizer": "./src/Visualizer.tsx",
+    "./VisualizerWorker": "./src/VisualizerWorker.ts"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aura-music/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { dicts, pickLang } from "../hooks/useI18n";
+import { dicts, pickLang } from "@aura-music/view/hooks/useI18n";
 
 test("pickLang follows browser language priority", () => {
   expect(pickLang(["zh-CN", "en-US"], "en-US")).toBe("zh");

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { parseLyrics } from "../services/lyrics";
-import { sparse } from "../services/lyrics/visibility";
+import { parseLyrics } from "@aura-music/lyrics/parser/index";
+import { sparse } from "@aura-music/lyrics/parser/visibility";
 
 test("instrumental notices and production credits collapse the lyric panel", () => {
   for (const text of [

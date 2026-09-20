@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { LyricsMotion } from "../components/lyrics/LyricsMotion";
-import { LineAnimation } from "../components/lyrics/LineAnimation";
-import { LyricsTimeline } from "../services/lyrics/timeline";
+import { LyricsMotion } from "@aura-music/lyrics/renderer/LyricsMotion";
+import { LineAnimation } from "@aura-music/lyrics/renderer/LineAnimation";
+import { LyricsTimeline } from "@aura-music/lyrics/parser/timeline";
 
 const fixture = () => {
   const timeline = new LyricsTimeline(Array.from({ length: 80 }, (_, i) => ({ time: i * 4, endTime: i * 4 + 3, text: `Line ${i}` })));
@@ -113,7 +113,7 @@ test("line press can reverse without a positional discontinuity and settles afte
 });
 
 test("secondary text and interlude reveal continue at a paused playhead and reverse without jumping", async () => {
-  const { LyricReveal } = await import("../components/lyrics/LyricReveal");
+  const { LyricReveal } = await import("@aura-music/lyrics/renderer/LyricReveal");
   const reveal = new LyricReveal();
   for (let i = 0; i < 20; i++) reveal.update(true, 1 / 60);
   const height = reveal.height;

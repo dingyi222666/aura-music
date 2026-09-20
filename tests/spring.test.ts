@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { advance, Spring, LINE_SPRING, PRESS_SPRING, RELEASE_SPRING } from "../services/springSystem";
+import { advance, Spring, LINE_SPRING, PRESS_SPRING, RELEASE_SPRING } from "@aura-music/core/springSystem";
 
 test("spring trajectories agree across refresh rates and uneven frames in all damping regimes", () => {
   for (const damping of [7, 18, 20, 50]) {
@@ -68,7 +68,7 @@ test("press and release remain finite across a long frame and settle naturally",
 });
 
 test("lift uses elapsed media time so seeks and pauses do not accumulate frame error", async () => {
-  const { liftAt, LIFT_SPRING } = await import("../services/springSystem");
+  const { liftAt, LIFT_SPRING } = await import("@aura-music/core/springSystem");
   expect(liftAt(-1)).toBe(0);
   expect(liftAt(0)).toBe(0);
   expect(liftAt(0.1)).toBeGreaterThan(0);

@@ -1,0 +1,35 @@
+{
+  "name": "@aura-music/player",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./MediaSessionController": "./src/MediaSessionController.tsx",
+    "./services/libraryStore": "./src/services/libraryStore.ts",
+    "./services/lyricsService": "./src/services/lyricsService.ts",
+    "./services/utils": "./src/services/utils.ts",
+    "./usePlayer": "./src/usePlayer.ts",
+    "./usePlaylist": "./src/usePlaylist.ts"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aura-music/core": "workspace:*",
+    "@aura-music/lyrics": "workspace:*",
+    "colorthief": "^3.3.1",
+    "jsmediatags": "^3.9.7"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

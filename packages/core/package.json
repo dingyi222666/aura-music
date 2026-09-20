@@ -1,0 +1,35 @@
+{
+  "name": "@aura-music/core",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./audioEnvelope": "./src/audioEnvelope.ts",
+    "./audioLevelBridge": "./src/audioLevelBridge.ts",
+    "./audioSpectrum": "./src/audioSpectrum.ts",
+    "./cache": "./src/cache.ts",
+    "./keyboardRegistry": "./src/keyboardRegistry.ts",
+    "./react/useCanvasRenderer": "./src/react/useCanvasRenderer.ts",
+    "./react/useKeyboardScope": "./src/react/useKeyboardScope.ts",
+    "./react/usePageActive": "./src/react/usePageActive.ts",
+    "./springSystem": "./src/springSystem.ts",
+    "./types": "./src/types.ts",
+    "./react": "./src/react/index.ts"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

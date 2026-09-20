@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { LyricsTimeline } from "../services/lyrics/timeline";
+import { LyricsTimeline } from "@aura-music/lyrics/parser/timeline";
 
 test("timing retains the current lyric across gaps and backwards seeks", () => {
   const timeline = new LyricsTimeline([

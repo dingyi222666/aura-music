@@ -1,0 +1,51 @@
+{
+  "name": "@aura-music/view",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./components/Controls": "./src/components/Controls.tsx",
+    "./components/Icons": "./src/components/Icons.tsx",
+    "./components/ImportMusicDialog": "./src/components/ImportMusicDialog.tsx",
+    "./components/KeyboardShortcuts": "./src/components/KeyboardShortcuts.tsx",
+    "./components/LyricToggles": "./src/components/LyricToggles.tsx",
+    "./components/PlaylistPanel": "./src/components/PlaylistPanel.tsx",
+    "./components/SearchModal": "./src/components/SearchModal.tsx",
+    "./components/SmartImage": "./src/components/SmartImage.tsx",
+    "./components/Toast": "./src/components/Toast.tsx",
+    "./components/TopBar": "./src/components/TopBar.tsx",
+    "./glass/GlassDialog": "./src/glass/GlassDialog.tsx",
+    "./glass/GlassMaterial": "./src/glass/GlassMaterial.tsx",
+    "./hooks/useFitScale": "./src/hooks/useFitScale.ts",
+    "./hooks/useI18n": "./src/hooks/useI18n.tsx",
+    "./hooks/useNeteaseSearchProvider": "./src/hooks/useNeteaseSearchProvider.ts",
+    "./hooks/useQueueSearchProvider": "./src/hooks/useQueueSearchProvider.ts",
+    "./hooks/useSearchModal": "./src/hooks/useSearchModal.ts",
+    "./hooks/useSearchProvider": "./src/hooks/useSearchProvider.ts",
+    "./hooks/useToast": "./src/hooks/useToast.ts",
+    "./style.css": "./src/style.css",
+    "./glass/motion": "./src/glass/motion.ts",
+    "./glass/controls": "./src/glass/controls/index.ts"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aura-music/core": "workspace:*",
+    "@aura-music/player": "workspace:*",
+    "@aura-music/visualizer": "workspace:*",
+    "@react-spring/web": "^10.0.3"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

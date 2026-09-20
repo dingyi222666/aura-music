@@ -1,0 +1,247 @@
+@import "tailwindcss" source(none);
+
+@source "../../../apps/web-player/src";
+@source "../../lyrics/src";
+@source "../../background/src";
+@source "../../visualizer/src";
+@source "./components";
+@source "./hooks";
+
+/* Animate actual height so both end caps remain circular at every frame. */
+.slider { --track-size: 6px; }
+.slider-volume { --track-size: 4px; }
+.slider-track {
+  pointer-events: none;
+  height: var(--track-size);
+  border-radius: 999px;
+  transition: height 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slider:is(:hover, :focus-within, :active) .slider-track {
+  height: calc(var(--track-size) * 2);
+}
+.player-action {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: rgb(255 255 255 / 0.66);
+  transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 220ms ease, color 220ms ease, box-shadow 220ms ease;
+}
+.player-action:hover {
+  color: white;
+  background: rgb(255 255 255 / 0.09);
+  transform: scale(1.07);
+}
+.player-action:active { transform: scale(0.94); }
+[data-queue-trigger]:is(:hover, :active), [data-settings-trigger]:is(:hover, :active) { transform: none; }
+.player-action[data-active="true"] {
+  color: white;
+}
+.player-action:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.8);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .slider-track, .player-action { transition: none; }
+}
+
+/* Glass keeps the requested dark appearance in both system themes. The fill is
+   a black press at 30%: the backdrop stays visible through it, and the
+   saturation boost keeps its colour from washing out to grey. */
+:root {
+  color-scheme: dark;
+  --glass-ink: 255 255 255;
+  --glass-secondary: 255 255 255;
+  --glass-accent: #0091ff;
+  /* The renderer's glass is a black press (tint 1.15 / 1.25 on the dark tone),
+     so the CSS path matches it. A light fallback flashed white whenever a
+     surface swapped back to CSS mid-fade, e.g. when the toolbar retired. */
+  --glass-fill: 51 51 51 / .34;
+  --glass-saturation: 1.5;
+  --glass-line: 255 255 255 / .17;
+  --glass-hairline: inset 0 0 0 .5px rgb(var(--glass-line));
+  --glass-wash: 255 255 255;
+  /* A surface's own shadow lands in its backdrop, so the optics blur and
+     refract it back as a dark band inside the edge. Keep it faint. */
+  /* IosNotificationDemo: shadowColor black .2, offsetY 7, blur 21. */
+  --glass-shadow: 0 7px 21px rgb(0 0 0 / .2);
+}
+.glass-surface {
+  isolation: isolate; color: rgb(var(--glass-ink));
+  background: rgb(var(--glass-fill)); backdrop-filter: blur(12px) saturate(var(--glass-saturation));
+  box-shadow: var(--glass-shadow), var(--glass-hairline);
+}
+/* A surface carrying the lens: `--glass-filter` is the SVG filter graph
+   GlassMaterial builds (colour controls, blur, refraction taps) and the fill
+   is the preset's `onDrawSurface` colour. The Kotlin surface has no hairline;
+   its rim is the highlight stroke on `.glass-rim`. */
+:is(.glass-surface, .glass-menu-shell)[data-glass="lens"] {
+  background: rgb(var(--glass-lens-fill, var(--glass-fill)));
+  backdrop-filter: var(--glass-filter);
+  --glass-hairline: 0 0 transparent;
+  box-shadow: var(--glass-shadow);
+}
+/* ?glassdebug: a surface that fell back to CSS glass turns magenta. */
+:root[data-glass-debug="1"] :is(.glass-surface, .glass-menu-shell)[data-glass="fallback"] {
+  background: rgb(255 0 255 / .9) !important;
+}
+/* The filter definition lives inside the surface so its id resolves in the
+   same document; it takes no space. */
+.glass-defs { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+/* Highlight stroke (Kotlin HighlightNode): sits above the refracted backdrop
+   and the fill, below the surface's content, added with BlendMode.Plus. */
+.glass-rim {
+  position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%;
+  pointer-events: none; display: block; mix-blend-mode: plus-lighter; border-radius: inherit;
+}
+.glass-menu-shell .glass-rim { z-index: 0; }
+
+.glass-foreground { color: rgb(var(--glass-ink)); }
+.glass-overlay {
+  position: fixed; inset: 0; z-index: 10001; display: grid; place-items: center;
+  padding: 24px; background: rgb(0 0 0 / .18);
+}
+.glass-dialog {
+  position: relative; width: min(100%, 420px); max-height: calc(100dvh - 48px);
+  overflow-y: auto; border-radius: 48px; outline: none;
+  animation: glass-dialog-in 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* MenuDemo: shadowColor black .14, offsetY 18, blur 46. */
+.glass-dialog { --glass-shadow: 0 18px 46px rgb(0 0 0 / .14); --glass-fill: 51 51 51 / .37; }
+.glass-dialog-wide { width: min(100%, 660px); }
+.glass-overlay[data-open="false"] { animation: glass-shade-out 220ms ease-in forwards; }
+.glass-overlay[data-open="false"] .glass-dialog { animation: glass-dialog-out 220ms ease-in forwards; }
+.glass-dialog-body { padding: 30px 30px 18px; }
+.glass-dialog h2 { font-size: 22px; font-weight: 650; letter-spacing: -.5px; line-height: 1.2; }
+.glass-description { font-size: 14px; line-height: 1.65; color: rgb(var(--glass-secondary) / .7); }
+.glass-caption { color: rgb(var(--glass-secondary) / .68); font-size: 12px; }
+.glass-dialog-icon { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 18px; background: rgb(10 132 255 / 0.13); color: #0a84ff; margin-bottom: 20px; }
+.glass-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 8px 24px 24px; }
+.glass-button {
+  min-height: 38px; padding: 8px 20px; border-radius: 999px; font-weight: 600; font-size: 14px;
+  color: rgb(var(--glass-ink)); background: rgb(var(--glass-wash) / 0.08);
+  transition: background 150ms;
+}
+.glass-button:hover { background: rgb(var(--glass-wash) / 0.14); }
+.glass-button:disabled { opacity: .4; cursor: not-allowed; }
+.glass-primary, .glass-primary:hover { background: var(--glass-accent); color: white; }
+.glass-primary:hover { background: color-mix(in srgb, var(--glass-accent), white 10%); }
+:is(.glass-surface, .glass-menu) :focus-visible { outline: 2px solid #409cff; outline-offset: 3px; }
+/* Same ring, no gap: the field's edge is the ring's edge. */
+/* No border: the field's own wash carries the shape, so the focus ring is the
+   only outline around it (the light inner hairline read as a second, white box). */
+.glass-input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; background: rgb(var(--glass-wash) / .05); font-size: 14px; }
+/* The focus ring hugs the field instead of floating 3px away from it. */
+.glass-input:focus-visible { outline-offset: 0; }
+
+/* Every text field, not just .glass-input: no light inner hairline (the field's
+   own fill carries its shape) and a focus ring that hugs the box. `!important`
+   is needed to beat both the per-field utility classes some fields carry and the
+   grouped `:is(.glass-surface, .glass-menu) :focus-visible` rule above. */
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+textarea,
+select {
+  border-color: transparent !important;
+}
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline-offset: 0 !important;
+}
+.glass-input::placeholder { color: rgb(var(--glass-ink) / .4); }
+/* A macOS grouped list: one recessed rounded card, hairline row dividers. */
+.glass-links { border-radius: 12px; overflow: hidden; background: rgb(0 0 0 / .18); box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .06); }
+.glass-links a { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; font-size: 14px; transition: background 150ms ease-out; }
+.glass-links a + a { box-shadow: inset 0 .5px 0 rgb(255 255 255 / .08); }
+.glass-links a:hover { background: rgb(255 255 255 / .06); }
+.glass-links a span { color: rgb(var(--glass-ink) / .4); }
+.glass-menu { isolation: isolate; color: rgb(var(--glass-ink)); border-radius: 48px; }
+/* Matches the menu preset's shallow tint for the CSS fallback path. */
+.glass-menu-shell { --glass-fill: 51 51 51 / .32; }
+.glass-menu-shell {
+  position: absolute; left: 0; top: 0; pointer-events: none; z-index: -1;
+  background: rgb(var(--glass-fill)); backdrop-filter: blur(12px) saturate(var(--glass-saturation));
+  box-shadow: var(--glass-shadow);
+}
+.glass-menu-content {
+  position: relative; display: flex; flex: 1; min-height: 0; flex-direction: column;
+  max-height: inherit; overflow: hidden; border-radius: 38px;
+  transform-origin: center; visibility: hidden;
+}
+.glass-menu[data-open="false"] { pointer-events: none; }
+.glass-menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 42px; padding: 10px 12px; border-radius: 8px; font-size: 13px; text-align: left; }
+.glass-menu-row:hover, .glass-menu-row:focus-visible { background: rgb(var(--glass-wash) / .08); }
+/* Knobs of the switch and slider: solid white on the CSS path, and the lens
+   fill once the shader lens draws them (the [data-glass="lens"] rule wins on
+   specificity because it carries the surface class as well). */
+.glass-knob { background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .25), 0 0 0 .5px rgb(0 0 0 / .08); }
+.glass-speed { flex: 1; padding: 7px 0; font-size: 12px; border-radius: 12px; }
+.glass-speed:hover, .glass-speed[aria-pressed="true"] { background: rgb(var(--glass-wash) / .1); }
+.glass-separator { height: 1px; margin: 0 10px 5px; background: rgb(var(--glass-wash) / .1); }
+
+.glass-toolbar-button {
+  display: grid; place-items: center; position: relative; width: 36px; height: 36px;
+  border-radius: 50%; background: transparent; color: rgb(var(--glass-ink) / .85);
+  transition: background 120ms ease-out; outline-offset: 3px;
+}
+.glass-toolbar-button:hover { background: rgb(var(--glass-wash) / .1); }
+.glass-toolbar-button:active { background: rgb(var(--glass-wash) / .16); }
+.glass-toolbar-button:disabled { opacity: .3; cursor: not-allowed; }
+.glass-toolbar-button svg { width: 20px; height: 20px; }
+.glass-toolbar-actions {
+  /* Fully clear and unblurred: the lens preset runs tint 0 / blur 0, so the
+     CSS fallback matches rather than frosting the bar. */
+  --glass-fill: 0 0 0 / 0;
+  backdrop-filter: none;
+  position: relative; display: flex; align-items: center; gap: 4px; padding: 5px;
+  /* A real pill radius: the renderer draws the shape, but the element's own
+     shadow follows `border-radius`, and a square radius casts a square halo. */
+  border-radius: 999px;
+}
+/* Glass bezel (Kyant0 / liquid-dom): a bright specular lip on top, a thin dark
+   edge ring, a soft under-shade and a drop shadow — so the glass reads as a lit
+   solid, not a flat tint. */
+.glass-toolbar-actions, .glass-button-liquid {
+  box-shadow:
+    inset 0 .5px 0 rgb(255 255 255 / .4),
+    inset 0 0 0 .5px rgb(0 0 0 / .22),
+    inset 0 -1px 2px rgb(0 0 0 / .1),
+    0 2px 8px rgb(0 0 0 / .18);
+}
+.glass-button-liquid { border-radius: 999px; overflow: hidden; }
+/* A fourth-order superellipse has zero curvature and curvature derivative at
+   its straight-edge joins (G3). Round thumbs and circular glyphs stay circles. */
+@supports (corner-shape: superellipse(2)) {
+  [class*="rounded"]:not([class*="rounded-full"]), .glass-surface, .glass-rim,
+  .glass-menu, .glass-menu-shell, .glass-menu-content,
+  .glass-button, .glass-input, .glass-menu-row, .glass-speed, .glass-dialog-icon {
+    corner-shape: superellipse(2);
+  }
+  .glass-rim { corner-shape: inherit; }
+  /* Pills (the toolbar capsules) keep true semicircular ends; only surfaces
+     with a visible straight-to-arc join take the G3 corner. */
+  .glass-toolbar-actions, [class*="rounded-full"] { corner-shape: round; }
+}
+/* Migrate existing UI typography to system glass foregrounds, including icons. */
+:is(.glass-surface, .glass-menu, .glass-foreground) [class~="text-white"] { color: rgb(var(--glass-ink)); }
+:is(.glass-surface, .glass-menu, .glass-foreground) [class*="text-white/"] { color: rgb(var(--glass-ink) / .64); }
+:is(.glass-surface, .glass-menu, .glass-foreground) :is([class~="text-white/90"], [class~="text-white/80"]) { color: rgb(var(--glass-ink) / .9); }
+:is(.glass-surface, .glass-menu, .glass-foreground) :is([class~="text-white/30"], [class~="text-white/20"]) { color: rgb(var(--glass-ink) / .4); }
+/* Fade the shade itself, never the overlay's opacity: an ancestor with
+   opacity < 1 becomes a backdrop root, which would cut the dialog's
+   backdrop-filter off from the page and flash a black slab while closing. */
+@keyframes glass-shade-out { to { background-color: rgb(0 0 0 / 0); } }
+@keyframes glass-dialog-in { from { opacity: 0; transform: translateY(12px) scale(.94); } }
+@keyframes glass-dialog-out { to { opacity: 0; transform: translateY(6px) scale(.97); } }
+@media (prefers-reduced-motion: reduce) {
+  .glass-overlay, .glass-dialog, .glass-menu-content { animation: none !important; }
+  .glass-menu *, .glass-menu ::before, .glass-button { transition: none !important; }
+}
+
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  :root, .glass-toolbar-actions { --glass-fill: 38 38 40 / .97; }
+}

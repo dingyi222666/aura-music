@@ -1,0 +1,37 @@
+{
+  "name": "@aura-music/background",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./FluidBackground": "./src/FluidBackground.tsx",
+    "./mobile/index": "./src/mobile/index.ts",
+    "./renderer/BaseBackgroundRender": "./src/renderer/BaseBackgroundRender.ts",
+    "./renderer/UIBackgroundRender": "./src/renderer/UIBackgroundRender.ts",
+    "./renderer/WebWorkerBackgroundRender": "./src/renderer/WebWorkerBackgroundRender.ts",
+    "./renderer/composition": "./src/renderer/composition.ts",
+    "./renderer/index": "./src/renderer/index.ts",
+    "./renderer/mesh": "./src/renderer/mesh.ts",
+    "./renderer/motion": "./src/renderer/motion.ts",
+    "./renderer/postprocess": "./src/renderer/postprocess.ts",
+    "./renderer/webWorkerBackground.worker": "./src/renderer/webWorkerBackground.worker.ts"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aura-music/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}
