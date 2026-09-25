@@ -456,12 +456,18 @@ export const usePlayer = ({
   const mergeLyricsWithMetadata = useCallback(
     (result: MatchedLyricsResult) => {
       const hasTtml = Boolean(result.ttml && result.ttml.trim());
+      const ttmlLyrics = hasTtml ? parseLyrics(result.ttml!) : [];
 
-      const parsed = hasTtml
-        ? parseLyrics(result.ttml!)
+      if (hasTtml && ttmlLyrics.length === 0) {
+        console.warn("TTML lyrics parsed empty; falling back to NetEase lyrics");
+      }
+
+      const parsed = ttmlLyrics.length > 0
+        ? ttmlLyrics
         : parseLyrics(result.lrc ?? "", result.tLrc, {
             yrcContent: result.yrc,
           });
+      if (parsed.length === 0) return [];
 
       const metadataCount = result.metadata.length;
       const metadataLines = result.metadata.map((text, idx) => ({
@@ -512,9 +518,6 @@ export const usePlayer = ({
 
     const markMatchFailed = () => {
       if (cancelled) return;
-      updateSongInQueue(songId, {
-        needsLyricsMatch: false,
-      });
       setMatchStatus("failed");
     };
 
@@ -528,7 +531,7 @@ export const usePlayer = ({
       return;
     }
 
-    if (!needsLyricsMatch) {
+    if (!needsLyricsMatch && !(isNeteaseSong && songNeteaseId)) {
       markMatchFailed();
       return;
     }
@@ -536,37 +539,22 @@ export const usePlayer = ({
     const fetchLyrics = async () => {
       setMatchStatus("matching");
       try {
-        if (isNeteaseSong && songNeteaseId) {
-          const raw = await withTimeout(
-            fetchLyricsById(songNeteaseId),
-            MATCH_TIMEOUT_MS,
-          );
-          if (cancelled) return;
-          if (raw) {
-            updateSongInQueue(songId, {
-              lyrics: mergeLyricsWithMetadata(raw),
-              needsLyricsMatch: false,
-            });
-            markMatchSuccess();
-          } else {
-            markMatchFailed();
-          }
-        } else {
-          const result = await withTimeout(
-            searchAndMatchLyrics(songTitle, songArtist),
-            MATCH_TIMEOUT_MS,
-          );
-          if (cancelled) return;
-          if (result) {
-            updateSongInQueue(songId, {
-              lyrics: mergeLyricsWithMetadata(result),
-              needsLyricsMatch: false,
-            });
-            markMatchSuccess();
-          } else {
-            markMatchFailed();
-          }
+        const result = await withTimeout(
+          isNeteaseSong && songNeteaseId
+            ? fetchLyricsById(songNeteaseId)
+            : searchAndMatchLyrics(songTitle, songArtist),
+          MATCH_TIMEOUT_MS,
+        );
+        if (cancelled) return;
+
+        const lyrics = result ? mergeLyricsWithMetadata(result) : [];
+        if (lyrics.length === 0) {
+          markMatchFailed();
+          return;
         }
+
+        updateSongInQueue(songId, { lyrics, needsLyricsMatch: false });
+        markMatchSuccess();
       } catch (error) {
         console.warn("Lyrics matching failed:", error);
         markMatchFailed();
